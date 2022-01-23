@@ -1,5 +1,4 @@
 import { Conditions } from "./condition";
-import { buildDependencyGraph, findCircularReferences } from "./graph";
 import { Mappings } from "./mapping";
 import { Metadata } from "./metadata";
 import { Parameters } from "./parameter";
@@ -65,14 +64,4 @@ export interface CloudFormationTemplate {
    */
   readonly Resources: Resources;
   readonly Outputs?: {};
-}
-
-export function validateTemplate(template: CloudFormationTemplate) {
-  const dependencyGraph = buildDependencyGraph(template);
-  const circularReferences = findCircularReferences(dependencyGraph);
-  if (circularReferences.length > 0) {
-    throw new Error(
-      `circular references detected: ${circularReferences.join(",")}`
-    );
-  }
 }

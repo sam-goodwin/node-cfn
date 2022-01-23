@@ -19,6 +19,13 @@ export interface DependencyGraph {
   [logicalId: string]: string[];
 }
 
+/**
+ * Builds the {@link DependencyGraph} for the {@link template}.
+ *
+ * @param template a {@link CloudFormationTemplate}
+ * @returns the {@link DependencyGraph} for the {@link CloudFormationTemplate}.
+ * @throws an Error if the stack is invalid, for example when there are any circular references in the template
+ */
 export function buildDependencyGraph(
   template: CloudFormationTemplate
 ): DependencyGraph {
@@ -30,12 +37,20 @@ export function buildDependencyGraph(
     }
     graph[logicalId] = Array.from(new Set(references));
   }
+
+  const circularReferences = findCircularReferences(graph);
+  if (circularReferences.length > 0) {
+    throw new Error(
+      `circular references detected: ${circularReferences.join(",")}`
+    );
+  }
+
   return graph;
 }
 
 const emptySet = ImmutableSet<string>([]);
 
-export function findCircularReferences(graph: DependencyGraph): string[] {
+function findCircularReferences(graph: DependencyGraph): string[] {
   const circularReferences: string[] = [];
   for (const [logicalId, references] of Object.entries(graph)) {
     for (const reference of references) {
@@ -75,7 +90,7 @@ export function findCircularReferences(graph: DependencyGraph): string[] {
   return circularReferences;
 }
 
-export function findReferences(expr: Expression): string[] {
+function findReferences(expr: Expression): string[] {
   if (isIntrinsicFunction(expr)) {
     if (isRef(expr)) {
       return [expr.Ref];
