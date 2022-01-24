@@ -10,7 +10,9 @@ export async function main() {
     stackName: "my-stack",
   });
 
-  let state = await deployer.updateStack(template(1));
+  let state = await deployer.updateStack(template(1), {
+    HashKey: "Album",
+  });
   console.log("Create", state);
 
   // state = await deployer.updateStack(template(2));
@@ -22,6 +24,23 @@ export async function main() {
 function template(ShardCount: number): CloudFormationTemplate {
   return {
     AWSTemplateFormatVersion: "2010-09-09",
+    Parameters: {
+      HashKey: {
+        Type: "String",
+        AllowedValues: ["Album"],
+      },
+    },
+    Rules: {
+      AlbumIsAlbum: {
+        Assertions: [
+          {
+            Assert: {
+              "Fn::Equals": [{ Ref: "HashKey" }, "Album"],
+            },
+          },
+        ],
+      },
+    },
     Resources: {
       myDynamoDBTable: {
         Type: "AWS::DynamoDB::Table",

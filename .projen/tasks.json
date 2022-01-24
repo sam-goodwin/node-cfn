@@ -218,7 +218,7 @@
           "exec": "yarn install --check-files"
         },
         {
-          "exec": "yarn upgrade @types/immutable @types/jest @types/node @typescript-eslint/eslint-plugin @typescript-eslint/parser eslint-config-prettier eslint-import-resolver-node eslint-import-resolver-typescript eslint-plugin-import eslint-plugin-prettier eslint jest jest-junit json-schema npm-check-updates prettier standard-version ts-jest ts-node typescript @aws-sdk/client-cloudcontrol fast-json-patch immutable"
+          "exec": "yarn upgrade @types/immutable @types/jest @types/node @typescript-eslint/eslint-plugin @typescript-eslint/parser eslint-config-prettier eslint-import-resolver-node eslint-import-resolver-typescript eslint-plugin-import eslint-plugin-prettier eslint jest jest-junit json-schema npm-check-updates prettier standard-version ts-jest ts-node typescript @aws-sdk/client-cloudcontrol @aws-sdk/client-ssm fast-json-patch immutable"
         },
         {
           "exec": "npx projen"

@@ -1,9 +1,12 @@
 import { Conditions } from "./condition";
 import { Mappings } from "./mapping";
 import { Metadata } from "./metadata";
+import { Outputs } from "./output";
 import { Parameters } from "./parameter";
 import { Resources } from "./resource";
 import { Rules } from "./rule";
+// @ts-ignore - imported for ts-doc
+import type { Stack } from "./stack";
 import { Transform } from "./transform";
 
 export interface CloudFormationTemplate {
@@ -63,5 +66,12 @@ export interface CloudFormationTemplate {
    * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/resources-section-structure.html
    */
   readonly Resources: Resources;
-  readonly Outputs?: {};
+  /**
+   * Output values from a {@link Stack}.
+   *
+   * The optional {@link Outputs} section declares output values that you can import into other {@link Stack}s (to create cross-stack references),
+   *
+   * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/outputs-section-structure.html
+   */
+  readonly Outputs?: Outputs;
 }

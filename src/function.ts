@@ -33,6 +33,36 @@ export type IntrinsicFunction =
   | FnTransform
   | Ref;
 
+/**
+ * Checks if the {@link expr} string is a short-hand {@link Ref} string.
+ *
+ * Example: "!Ref <id>".
+ *
+ * @param expr a string expression.
+ * @returns true if the string starts with `"!Ref "`.
+ */
+export function isRefString(expr: string): boolean {
+  return expr.startsWith("!Ref ");
+}
+
+/**
+ * Parses the {@link expr} short-hand {@link Ref} string into a {@link Ref} data structure.
+ *
+ * @param expr a string expression.
+ * @returns the expanded {@link Ref} data structure representation of the {@link expr}
+ * @throws an Error if {@link expr} is not in the short-hand form.
+ */
+export function parseRefString(expr: string): Ref {
+  if (!isRefString(expr)) {
+    throw new Error(
+      `the string "${expr}" is not in the form of a short-hand Ref, e.g. "!Ref <id>"`
+    );
+  }
+  return {
+    Ref: expr.substring("!Ref ".length),
+  };
+}
+
 export const isRef = guard<Ref>("Ref");
 
 /**

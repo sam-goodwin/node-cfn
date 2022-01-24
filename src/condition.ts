@@ -1,4 +1,4 @@
-import { RuleCondition } from "./rule";
+import { RuleFunction } from "./rule";
 
 /**
  * The optional Conditions section contains statements that define the circumstances under which entities are created or configured. For example, you can create a condition and then associate it with a resource or output so that AWS CloudFormation only creates the resource or output if the condition is true. Similarly, you can associate the condition with a property so that AWS CloudFormation only sets the property to a specific value if the condition is true. If the condition is false, AWS CloudFormation sets the property to a different value that you specify.
@@ -12,5 +12,5 @@ import { RuleCondition } from "./rule";
  * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/conditions-section-structure.html
  */
 export interface Conditions {
-  [logicalId: string]: RuleCondition;
+  [logicalId: string]: RuleFunction;
 }

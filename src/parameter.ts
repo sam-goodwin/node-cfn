@@ -1,14 +1,30 @@
+import { deepStrictEqual } from "assert";
+import { EvaluatedExpression } from "./expression";
+import { validateRules } from "./rule";
+import { CloudFormationTemplate } from "./template";
+
 /**
  * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html
  */
 export interface Parameters {
-  [key: string]: Parameter;
+  [parameterName: string]: Parameter;
+}
+
+/**
+ * Input values for {@link Parameters}.
+ */
+export interface ParameterValues {
+  [parameterName: string]: EvaluatedExpression;
 }
 
 /**
  * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#parameters-section-structure-properties-type
  */
 export interface Parameter {
+  /**
+   * The data type for the parameter (DataType).
+   */
+  Type: ParameterType;
   /**
    * A regular expression that represents the patterns to allow for `String` types. The pattern must match the entire parameter value provided.
    */
@@ -55,10 +71,180 @@ export interface Parameter {
    * Whether to mask the parameter value to prevent it from being displayed in the console, command line tools, or API. If you set the NoEcho attribute to true, CloudFormation returns the parameter value masked as asterisks (*****) for any calls that describe the stack or stack events, except for information stored in the locations specified below.
    */
   NoEcho?: boolean;
-  /**
-   * The data type for the parameter (DataType).
-   */
-  Type: ParameterType;
+}
+
+/**
+ * Validate the {@link parameterValues} against the {@link Parameter} defintiions in the {@link template}.
+ *
+ * @param template the {@link CloudFormationTemplate}
+ * @param parameterValues input {@link ParameterValues}.
+ */
+export function validateParameters(
+  template: CloudFormationTemplate,
+  parameterValues: ParameterValues | undefined
+) {
+  if (template.Parameters === undefined) {
+    if (
+      parameterValues !== undefined &&
+      Object.keys(parameterValues).length > 0
+    ) {
+      throw new Error(
+        `the template accepts no Parameters, but Parameters were passed to the Template`
+      );
+    }
+  } else {
+    for (const [paramName, paramDef] of Object.entries(template.Parameters)) {
+      const paramVal = parameterValues?.[paramName];
+
+      validateParameter(paramName, paramDef, paramVal);
+    }
+
+    if (template.Rules) {
+      validateRules(
+        template.Rules,
+        template.Parameters ?? {},
+        parameterValues ?? {}
+      );
+    }
+  }
+}
+
+/**
+ * Validate the value of a {@link Parameter} against its type definition.
+ *
+ * @param paramName name of the {@link Parameter}
+ * @param paramDef the {@link Parameter} definition (defined the template).
+ * @param paramVal the input value of the {@link Parameter}.
+ */
+function validateParameter(
+  paramName: string,
+  paramDef: Parameter,
+  paramVal: EvaluatedExpression
+) {
+  const type = paramDef.Type;
+
+  if (paramVal === undefined) {
+    if (paramDef.Default === undefined) {
+      throw new Error(`Missing required input-Parameter ${paramName}`);
+    }
+  }
+
+  if (paramDef.AllowedPattern) {
+    const regex = new RegExp(paramDef.AllowedPattern);
+    if (typeof paramVal !== "string") {
+      throw new Error(
+        `Can only evaluted AllowedPattern against String values, but '${paramName}' was a '${typeof paramVal}'`
+      );
+    } else if (paramVal.match(regex) === null) {
+      throw new Error(
+        describeConstraint(`must match pattern ${paramDef.AllowedPattern}`)
+      );
+    }
+  }
+
+  if (paramDef.AllowedValues) {
+    let found: boolean = false;
+    if (paramDef.AllowedValues.length === 0) {
+      throw new Error(
+        `AllowedValues for parameter '${paramName}' must have at least one item.`
+      );
+    }
+    for (const allowedValue of paramDef.AllowedValues) {
+      try {
+        deepStrictEqual(paramVal, allowedValue);
+        found = true;
+        break;
+      } catch (err) {
+        // swallow
+      }
+    }
+    if (!found) {
+      throw new Error(
+        describeConstraint(
+          `must contain one of the AllowedValues [${paramDef.AllowedValues.map(
+            (v) => JSON.stringify(v)
+          ).join(", ")}]`
+        )
+      );
+    }
+  }
+
+  validateLength("MaxLength");
+  validateLength("MinLength");
+
+  if (
+    (type === "String" ||
+      type === "CommaDelimitedList" ||
+      type === "List<Number>") &&
+    typeof paramVal !== "string"
+  ) {
+    throw new Error(
+      `Malformed input-Parameter ${paramName} must be a String but was ${typeof paramVal}`
+    );
+  } else if (type === "Number" && typeof paramVal !== "number") {
+    throw new Error(
+      `Malformed input-Parameter ${paramName} must be a Number but was ${typeof paramVal}`
+    );
+  } else if (type === "List<Number>") {
+    const numbers = paramVal?.toString().split(",")!;
+    for (const number of numbers) {
+      try {
+        parseInt(number, 10);
+      } catch (err) {
+        throw new Error(
+          `Malformed input-Parameter ${paramName} must be a List<Number> but encountered value '${number}'`
+        );
+      }
+    }
+  } else if (type.startsWith("List<AWS::") && !Array.isArray(paramVal)) {
+    throw new Error(
+      `Malformed input-Parameter must be a ${type} but was ${typeof paramVal}`
+    );
+  } else if (type.startsWith("AWS::") && typeof paramVal !== "string") {
+    throw new Error(
+      `Malformed input-Parameter must be a String referring to a ${type} but was ${typeof paramVal}`
+    );
+  }
+
+  if (
+    type.startsWith("AWS::EC2") ||
+    type.startsWith("AWS::Route53") ||
+    type.startsWith("List<AWS::EC2") ||
+    type.startsWith("List<AWS::Route53")
+  ) {
+    // TODO: validate these rules:
+    // https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html#aws-specific-parameter-types
+  }
+  function validateLength(kind: "MaxLength" | "MinLength") {
+    const constraint = paramDef[kind];
+    if (constraint === undefined) {
+      return;
+    }
+    if (constraint) {
+      if (type !== "String") {
+        throw new Error(
+          `${kind} is only supported for String types, but was configured for ${paramName}: ${type}`
+        );
+      } else if (typeof paramVal !== "string") {
+        throw new Error(
+          `${kind} is only supported for String values, but ${paramName} evaluated to ${typeof paramVal}`
+        );
+      } else if (
+        (kind === "MaxLength" && paramVal.length > constraint) ||
+        (kind === "MinLength" && paramVal.length < constraint)
+      ) {
+        throw new Error(
+          describeConstraint(
+            `must have a ${kind} length of ${constraint}, but was ${paramVal.length}`
+          )
+        );
+      }
+    }
+  }
+
+  function describeConstraint(description = paramDef?.ConstraintDescription) {
+    return `Malformed input-Parameter ${paramName} ${description}`;
+  }
 }
 
 export type ParameterType =

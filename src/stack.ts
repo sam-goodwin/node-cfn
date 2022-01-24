@@ -1,11 +1,5 @@
-import {
-  CloudControlClient,
-  CreateResourceCommand,
-  DeleteResourceCommand,
-  UpdateResourceCommand,
-} from "@aws-sdk/client-cloudcontrol";
-
 import * as control from "@aws-sdk/client-cloudcontrol";
+import * as ssm from "@aws-sdk/client-ssm";
 
 import { compare } from "fast-json-patch";
 import { EvaluatedExpression, Expression } from "./expression";
@@ -22,6 +16,14 @@ import {
   isRef,
 } from "./function";
 import { buildDependencyGraph, DependencyGraph } from "./graph";
+
+import {
+  // @ts-ignore - imported for typedoc
+  SSMParameterType,
+  Parameter,
+  ParameterValues,
+  validateParameters,
+} from "./parameter";
 import {
   PhysicalResource,
   PhysicalResources,
@@ -60,6 +62,10 @@ export interface UpdateState {
    */
   dependencyGraph: DependencyGraph;
   /**
+   * Input {@link ParameterValues} for the {@link template}'s {@link Parameters}.
+   */
+  parameterValues?: ParameterValues;
+  /**
    * Map of `logicalId` to a task ({@link Promise}) resolving the new state of the {@link PhysicalResource}.
    */
   tasks: {
@@ -85,11 +91,17 @@ export interface StackProps {
    */
   readonly previousState?: StackState;
   /**
-   * The {@link CloudControlClient} to use when Creating, Updating and Deleting Resources.
+   * The {@link control.CloudControlClient} to use when Creating, Updating and Deleting Resources.
    *
    * @default - one is created with default configuration
    */
-  readonly controlClient?: CloudControlClient;
+  readonly controlClient?: control.CloudControlClient;
+  /**
+   * The {@link ssm.SSMClient} to use when resolving {@link SSMParameterType}
+   *
+   * @default - one is created with default configuration
+   */
+  readonly ssmClient?: ssm.SSMClient;
 }
 
 /**
@@ -109,9 +121,13 @@ export class Stack {
    */
   readonly stackName: string;
   /**
-   * The {@link CloudControlClient} to use when Creating, Updating and Deleting Resources.
+   * The {@link control.CloudControlClient} to use when Creating, Updating and Deleting Resources.
    */
-  readonly controlClient: CloudControlClient;
+  readonly controlClient: control.CloudControlClient;
+  /**
+   * The {@link ssm.SSMClient} to use when resolving {@link SSMParameterType}
+   */
+  readonly ssmClient: ssm.SSMClient;
 
   /**
    * Current {@link StackState} of the {@link Stack}.
@@ -123,7 +139,16 @@ export class Stack {
     this.region = props.region;
     this.stackName = props.stackName;
     this.state = props.previousState;
-    this.controlClient = props.controlClient ?? new CloudControlClient({});
+    this.controlClient =
+      props.controlClient ??
+      new control.CloudControlClient({
+        region: this.region,
+      });
+    this.ssmClient =
+      props.ssmClient ??
+      new ssm.SSMClient({
+        region: this.region,
+      });
   }
 
   /**
@@ -138,14 +163,14 @@ export class Stack {
    *
    * @returns the {@link PhysicalResource} if it exists, otherwise `undefined`.
    */
-  public getPhysicalResource(logicalId: string): PhysicalResource | undefined {
+  private getPhysicalResource(logicalId: string): PhysicalResource | undefined {
     return this.state?.resources[logicalId];
   }
 
   /**
    * Get the {@link LogicalResource} by its {@link logicalId}.
    */
-  public getLogicalResource(
+  private getLogicalResource(
     state: UpdateState,
     logicalId: string
   ): LogicalResource {
@@ -165,6 +190,20 @@ export class Stack {
       ];
     }
     return resource;
+  }
+
+  /**
+   * Get the {@link Parameter} definition by its {@link parameterName}.
+   *
+   * @param state current {@link UpdateState} being evaluated.
+   * @param parameterName name of the parameter to lookup.
+   * @returns the value of the {@link Parameter} if it exists, otherwise `undefined`.
+   */
+  private getParameterDefinition(
+    state: UpdateState,
+    parameterName: string
+  ): Parameter | undefined {
+    return state.template.Parameters?.[parameterName];
   }
 
   /**
@@ -234,7 +273,7 @@ export class Stack {
 
       const progress = (
         await this.controlClient.send(
-          new DeleteResourceCommand({
+          new control.DeleteResourceCommand({
             TypeName: physicalResource.Type,
             Identifier: physicalResource.PhysicalId,
           })
@@ -267,11 +306,15 @@ export class Stack {
    * @returns the new {@link StackState}.
    */
   public async updateStack(
-    template: CloudFormationTemplate
+    template: CloudFormationTemplate,
+    parameterValues?: ParameterValues
   ): Promise<StackState> {
+    validateParameters(template, parameterValues);
+
     const updateState: UpdateState = {
       template,
       dependencyGraph: buildDependencyGraph(template),
+      parameterValues,
       tasks: {},
     };
     return (this.state = {
@@ -322,7 +365,7 @@ export class Stack {
         let controlApiResult;
         if (physicalResource === undefined) {
           controlApiResult = await this.controlClient.send(
-            new CreateResourceCommand({
+            new control.CreateResourceCommand({
               TypeName: logicalResource.Type,
               DesiredState: JSON.stringify(properties),
             })
@@ -333,7 +376,7 @@ export class Stack {
             return physicalResource;
           }
           controlApiResult = await this.controlClient.send(
-            new UpdateResourceCommand({
+            new control.UpdateResourceCommand({
               TypeName: logicalResource.Type,
               PatchDocument: JSON.stringify(patch),
               Identifier: physicalResource.PhysicalId,
@@ -464,7 +507,12 @@ export class Stack {
     expr: IntrinsicFunction
   ): Promise<EvaluatedExpression> {
     if (isRef(expr)) {
-      return (await this.updateResource(state, expr.Ref)).PhysicalId;
+      const paramDef = this.getParameterDefinition(state, expr.Ref);
+      if (paramDef !== undefined) {
+        return this.evaluateParameter(state, expr.Ref, paramDef);
+      } else {
+        return (await this.updateResource(state, expr.Ref)).PhysicalId;
+      }
     } else if (isFnGetAtt(expr)) {
       const [logicalId, attributeName] = expr["Fn::GetAtt"];
       const resource = await this.updateResource(state, logicalId);
@@ -560,5 +608,93 @@ export class Stack {
     throw new Error(
       `expression not implemented: ${Object.keys(expr).join(",")}`
     );
+  }
+
+  /**
+   * Determine the value of a {@link paramName}.
+   *
+   * If the {@link Parameter} is a {@link SSMParameterType} then the value is fetched
+   * from AWS Systems Manager Parameter Store.
+   *
+   * The {@link CloudFormationTemplate}'s {@link Parameter}s and the input {@link ParameterValues}
+   * are assumed to be valid because the {@link validateParameters} function is called by
+   * {@link updateStack}.
+   *
+   * @param state {@link UpdateState} being evaluated.
+   * @param paramName name of the {@link Parameter}.
+   * @param paramDef the {@link Parameter} definition in the source {@link CloudFormationTemplate}.
+   */
+  private async evaluateParameter(
+    state: UpdateState,
+    paramName: string,
+    paramDef: Parameter
+  ): Promise<EvaluatedExpression> {
+    let paramVal = state.parameterValues?.[paramName];
+    if (paramVal === undefined) {
+      if (paramDef.Default !== undefined) {
+        paramVal = paramDef.Default;
+      } else {
+        throw new Error(`Missing required input-Parameter ${paramName}`);
+      }
+    }
+
+    const type = paramDef.Type;
+
+    if (type === "String" || type === "Number") {
+      return paramVal;
+    } else if (type === "CommaDelimitedList") {
+      return (paramVal as string).split(",");
+    } else if (type === "List<Number>") {
+      return (paramVal as string).split(",").map((s) => parseInt(s, 10));
+    } else if (
+      type.startsWith("AWS::EC2") ||
+      type.startsWith("AWS::Route53") ||
+      type.startsWith("List<AWS::EC2") ||
+      type.startsWith("List<AWS::Route53")
+    ) {
+      return paramVal;
+    } else if (type.startsWith("AWS::SSM")) {
+      try {
+        const ssmParamVal = await this.ssmClient.send(
+          new ssm.GetParameterCommand({
+            Name: paramVal as string,
+            WithDecryption: true,
+          })
+        );
+
+        if (
+          ssmParamVal.Parameter?.Name === undefined ||
+          ssmParamVal.Parameter.Value === undefined
+        ) {
+          throw new Error(`GetParameter '${paramVal}' returned undefined`);
+        }
+
+        if (type === "AWS::SSM::Parameter::Name") {
+          return ssmParamVal.Parameter.Name;
+        } else if (type === "AWS::SSM::Parameter::Value<String>") {
+          if (ssmParamVal.Parameter.Type !== "String") {
+            throw new Error(
+              `Expected SSM Parameter ${paramVal} to be ${type} but was ${ssmParamVal.Parameter.Type}`
+            );
+          }
+          return ssmParamVal.Parameter.Value;
+        } else if (
+          type === "AWS::SSM::Parameter::Value<List<String>>" ||
+          type.startsWith("AWS::SSM::Parameter::Value<List<")
+        ) {
+          if (ssmParamVal.Parameter.Type !== "StringList") {
+            throw new Error(
+              `Expected SSM Parameter ${paramVal} to be ${type} but was ${ssmParamVal.Parameter.Type}`
+            );
+          }
+          return ssmParamVal.Parameter.Value.split(",");
+        } else {
+        }
+      } catch (err) {
+        throw err;
+      }
+    }
+
+    return paramVal;
   }
 }
