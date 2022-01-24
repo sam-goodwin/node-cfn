@@ -15,12 +15,8 @@ const project = new typescript.TypeScriptProject({
   eslintOptions: {
     prettier: true,
   },
-});
-
-project.eslint.addOverride({
-  rules: {
-    "typescript-eslint/no-shadow": "off",
-  },
+  docgen: true,
+  gitignore: [".DS_Store"],
 });
 
 project.synth();

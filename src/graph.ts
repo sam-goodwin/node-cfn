@@ -10,10 +10,9 @@ import {
   isFnSub,
   isFnBase64,
 } from "./function";
-import { CloudFormationTemplate } from "./template";
-
 // @ts-ignore - for tsdoc
 import type { Stack } from "./stack";
+import { CloudFormationTemplate } from "./template";
 
 /**
  * Maps a Logical ID to the Logical IDs it depends on.

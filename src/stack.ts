@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-shadow */
 import * as control from "@aws-sdk/client-cloudcontrol";
 import * as ssm from "@aws-sdk/client-ssm";
 
@@ -256,7 +257,7 @@ export class Stack {
    */
   private async deleteResources(logicalIds: string[], state: UpdateState) {
     const allowedLogicalIds = new Set(logicalIds);
-    return await Promise.all(
+    return Promise.all(
       logicalIds.map(async (logicalId) => {
         state.tasks[logicalId] = this.deleteResource(
           logicalId,
@@ -841,9 +842,9 @@ export class Stack {
 
       const when = await this.evaluateExpr(whenExpr, state);
       if (when === true) {
-        return await this.evaluateExpr(thenExpr, state);
+        return this.evaluateExpr(thenExpr, state);
       } else if (when === false) {
-        return await this.evaluateExpr(elseExpr, state);
+        return this.evaluateExpr(elseExpr, state);
       } else {
         throw new Error(`invalid value for 'condition' in Fn:If: ${whenExpr}`);
       }

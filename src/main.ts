@@ -27,6 +27,7 @@ export async function main() {
 }
 
 function template(version: number): CloudFormationTemplate {
+  // eslint-disable-next-line @typescript-eslint/no-shadow
   const template: CloudFormationTemplate = {
     AWSTemplateFormatVersion: "2010-09-09",
     Conditions: {

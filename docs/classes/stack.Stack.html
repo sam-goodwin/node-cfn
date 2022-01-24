@@ -1,0 +1,1017 @@
+<!doctype html>
+<html class="default no-js">
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title>Stack | node-cfn</title>
+	<meta name="description" content="Documentation for node-cfn">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<link rel="stylesheet" href="../assets/css/main.css">
+	<script async src="../assets/js/search.js" id="search-script"></script>
+</head>
+<body>
+<header>
+	<div class="tsd-page-toolbar">
+		<div class="container">
+			<div class="table-wrap">
+				<div class="table-cell" id="tsd-search" data-index="../assets/js/search.json" data-base="..">
+					<div class="field">
+						<label for="tsd-search-field" class="tsd-widget search no-caption">Search</label>
+						<input id="tsd-search-field" type="text" />
+					</div>
+					<ul class="results">
+						<li class="state loading">Preparing search index...</li>
+						<li class="state failure">The search index is not available</li>
+					</ul>
+					<a href="../index.html" class="title">node-cfn</a>
+				</div>
+				<div class="table-cell" id="tsd-widgets">
+					<div id="tsd-filter">
+						<a href="#" class="tsd-widget options no-caption" data-toggle="options">Options</a>
+						<div class="tsd-filter-group">
+							<div class="tsd-select" id="tsd-filter-visibility">
+								<span class="tsd-select-label">All</span>
+								<ul class="tsd-select-list">
+									<li data-value="public">Public</li>
+									<li data-value="protected">Public/Protected</li>
+									<li data-value="private" class="selected">All</li>
+								</ul>
+							</div>
+							<input type="checkbox" id="tsd-filter-inherited" checked />
+							<label class="tsd-widget" for="tsd-filter-inherited">Inherited</label>
+							<input type="checkbox" id="tsd-filter-externals" checked />
+							<label class="tsd-widget" for="tsd-filter-externals">Externals</label>
+						</div>
+					</div>
+					<a href="#" class="tsd-widget menu no-caption" data-toggle="menu">Menu</a>
+				</div>
+			</div>
+		</div>
+	</div>
+	<div class="tsd-page-title">
+		<div class="container">
+			<ul class="tsd-breadcrumb">
+				<li>
+					<a href="../modules.html">node-cfn</a>
+				</li>
+				<li>
+					<a href="../modules/stack.html">stack</a>
+				</li>
+				<li>
+					<a href="stack.Stack.html">Stack</a>
+				</li>
+			</ul>
+			<h1>Class Stack</h1>
+		</div>
+	</div>
+</header>
+<div class="container container-main">
+	<div class="row">
+		<div class="col-8 col-content">
+			<section class="tsd-panel tsd-comment">
+				<div class="tsd-comment tsd-typography">
+					<div class="lead">
+						<p>Manages a {@link CloudFormationStack} deployed to AWS.</p>
+					</div>
+				</div>
+			</section>
+			<section class="tsd-panel tsd-hierarchy">
+				<h3>Hierarchy</h3>
+				<ul class="tsd-hierarchy">
+					<li>
+						<span class="target">Stack</span>
+					</li>
+				</ul>
+			</section>
+			<section class="tsd-panel-group tsd-index-group">
+				<h2>Index</h2>
+				<section class="tsd-panel tsd-index-panel">
+					<div class="tsd-index-content">
+						<section class="tsd-index-section ">
+							<h3>Constructors</h3>
+							<ul class="tsd-index-list">
+								<li class="tsd-kind-constructor tsd-parent-kind-class"><a href="stack.Stack.html#constructor" class="tsd-kind-icon">constructor</a></li>
+							</ul>
+						</section>
+						<section class="tsd-index-section ">
+							<h3>Properties</h3>
+							<ul class="tsd-index-list">
+								<li class="tsd-kind-property tsd-parent-kind-class"><a href="stack.Stack.html#account" class="tsd-kind-icon">account</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-class"><a href="stack.Stack.html#controlClient" class="tsd-kind-icon">control<wbr>Client</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-class"><a href="stack.Stack.html#region" class="tsd-kind-icon">region</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-class"><a href="stack.Stack.html#ssmClient" class="tsd-kind-icon">ssm<wbr>Client</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-class"><a href="stack.Stack.html#stackName" class="tsd-kind-icon">stack<wbr>Name</a></li>
+								<li class="tsd-kind-property tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#state" class="tsd-kind-icon">state</a></li>
+							</ul>
+						</section>
+						<section class="tsd-index-section ">
+							<h3>Methods</h3>
+							<ul class="tsd-index-list">
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#deleteResource" class="tsd-kind-icon">delete<wbr>Resource</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#deleteResources" class="tsd-kind-icon">delete<wbr>Resources</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class"><a href="stack.Stack.html#deleteStack" class="tsd-kind-icon">delete<wbr>Stack</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#evaluateAssertion" class="tsd-kind-icon">evaluate<wbr>Assertion</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#evaluateExpr" class="tsd-kind-icon">evaluate<wbr>Expr</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#evaluateIntrinsicFunction" class="tsd-kind-icon">evaluate<wbr>Intrinsic<wbr>Function</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#evaluateParameter" class="tsd-kind-icon">evaluate<wbr>Parameter</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#evaluatePseudoParameter" class="tsd-kind-icon">evaluate<wbr>Pseudo<wbr>Parameter</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#evaluateRule" class="tsd-kind-icon">evaluate<wbr>Rule</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#evaluateRuleExpressionToBoolean" class="tsd-kind-icon">evaluate<wbr>Rule<wbr>Expression<wbr>ToBoolean</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#getLogicalResource" class="tsd-kind-icon">get<wbr>Logical<wbr>Resource</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#getPhysicalResource" class="tsd-kind-icon">get<wbr>Physical<wbr>Resource</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class"><a href="stack.Stack.html#getState" class="tsd-kind-icon">get<wbr>State</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#updateResource" class="tsd-kind-icon">update<wbr>Resource</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class"><a href="stack.Stack.html#updateStack" class="tsd-kind-icon">update<wbr>Stack</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#validateParameters" class="tsd-kind-icon">validate<wbr>Parameters</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#validateRules" class="tsd-kind-icon">validate<wbr>Rules</a></li>
+								<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><a href="stack.Stack.html#waitForProgress" class="tsd-kind-icon">wait<wbr>For<wbr>Progress</a></li>
+							</ul>
+						</section>
+					</div>
+				</section>
+			</section>
+			<section class="tsd-panel-group tsd-member-group ">
+				<h2>Constructors</h2>
+				<section class="tsd-panel tsd-member tsd-kind-constructor tsd-parent-kind-class">
+					<a name="constructor" class="tsd-anchor"></a>
+					<h3>constructor</h3>
+					<ul class="tsd-signatures tsd-kind-constructor tsd-parent-kind-class">
+						<li class="tsd-signature tsd-kind-icon">new <wbr>Stack<span class="tsd-signature-symbol">(</span>props<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.StackProps.html" class="tsd-signature-type" data-tsd-kind="Interface">StackProps</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><a href="stack.Stack.html" class="tsd-signature-type" data-tsd-kind="Class">Stack</a></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>props: <a href="../interfaces/stack.StackProps.html" class="tsd-signature-type" data-tsd-kind="Interface">StackProps</a></h5>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <a href="stack.Stack.html" class="tsd-signature-type" data-tsd-kind="Class">Stack</a></h4>
+						</li>
+					</ul>
+				</section>
+			</section>
+			<section class="tsd-panel-group tsd-member-group ">
+				<h2>Properties</h2>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-class">
+					<a name="account" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagReadonly">Readonly</span> account</h3>
+					<div class="tsd-signature tsd-kind-icon">account<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+					<aside class="tsd-sources">
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>AWS Account.</p>
+						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-class">
+					<a name="controlClient" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagReadonly">Readonly</span> control<wbr>Client</h3>
+					<div class="tsd-signature tsd-kind-icon">control<wbr>Client<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">CloudControlClient</span></div>
+					<aside class="tsd-sources">
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>The {@link control.CloudControlClient} to use when Creating, Updating and Deleting Resources.</p>
+						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-class">
+					<a name="region" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagReadonly">Readonly</span> region</h3>
+					<div class="tsd-signature tsd-kind-icon">region<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+					<aside class="tsd-sources">
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>AWS Region.</p>
+						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-class">
+					<a name="ssmClient" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagReadonly">Readonly</span> ssm<wbr>Client</h3>
+					<div class="tsd-signature tsd-kind-icon">ssm<wbr>Client<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">SSMClient</span></div>
+					<aside class="tsd-sources">
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>The {@link ssm.SSMClient} to use when resolving <a href="../modules/parameter.html#SSMParameterType">SSMParameterType</a></p>
+						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-class">
+					<a name="stackName" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagReadonly">Readonly</span> stack<wbr>Name</h3>
+					<div class="tsd-signature tsd-kind-icon">stack<wbr>Name<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">string</span></div>
+					<aside class="tsd-sources">
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Account-wide unique name</p>
+						</div>
+					</div>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-property tsd-parent-kind-class tsd-is-private">
+					<a name="state" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> state</h3>
+					<div class="tsd-signature tsd-kind-icon">state<span class="tsd-signature-symbol">:</span> <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/stack.StackState.html" class="tsd-signature-type" data-tsd-kind="Interface">StackState</a></div>
+					<aside class="tsd-sources">
+					</aside>
+					<div class="tsd-comment tsd-typography">
+						<div class="lead">
+							<p>Current <a href="../interfaces/stack.StackState.html">StackState</a> of the <a href="stack.Stack.html">Stack</a>.</p>
+						</div>
+					</div>
+				</section>
+			</section>
+			<section class="tsd-panel-group tsd-member-group ">
+				<h2>Methods</h2>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="deleteResource" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> delete<wbr>Resource</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">delete<wbr>Resource<span class="tsd-signature-symbol">(</span>logicalId<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span>, state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a>, allowedLogicalIds<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Set</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">String</span><span class="tsd-signature-symbol">&gt;</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/resource.PhysicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalResource</a><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Delete a Resource from AWS. Recursively delete its dependencies if there are any.</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>logicalId: <span class="tsd-signature-type">string</span></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>Logical ID of the <a href="../interfaces/resource.PhysicalResource.html">PhysicalResource</a> to delete.</p>
+									</div>
+								</li>
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p><a href="../interfaces/stack.UpdateState.html">UpdateState</a> for this Stack Update operation.</p>
+									</div>
+								</li>
+								<li>
+									<h5>allowedLogicalIds: <span class="tsd-signature-type">Set</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">String</span><span class="tsd-signature-symbol">&gt;</span></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>a set of logicalIds that are allowed to be deleted. This is so that we
+											can delete a sub-set of the logicalIds when transiting dependencies,
+										for example when deleting orphaned resources during a Stack Update.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/resource.PhysicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalResource</a><span class="tsd-signature-symbol">&gt;</span></h4>
+							<p>the <a href="../interfaces/resource.PhysicalResource.html">PhysicalResource</a> that was deleted, or <code>undefined</code> if there was no Resource.</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="deleteResources" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> delete<wbr>Resources</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">delete<wbr>Resources<span class="tsd-signature-symbol">(</span>logicalIds<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span>, state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Delete the Resources identified by {@link logicalIds} in order of their dependencies.</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>logicalIds: <span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>list of logicalIds to delete</p>
+									</div>
+								</li>
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p><a href="../interfaces/stack.UpdateState.html">UpdateState</a> for this Stack Update operation.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class">
+					<a name="deleteStack" class="tsd-anchor"></a>
+					<h3>delete<wbr>Stack</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class">
+						<li class="tsd-signature tsd-kind-icon">delete<wbr>Stack<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Delete all resources in this Stack.</p>
+								</div>
+							</div>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="evaluateAssertion" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> evaluate<wbr>Assertion</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">evaluate<wbr>Assertion<span class="tsd-signature-symbol">(</span>assertion<span class="tsd-signature-symbol">: </span><a href="../interfaces/rule.Assertion.html" class="tsd-signature-type" data-tsd-kind="Interface">Assertion</a>, state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Evalautes an <a href="../interfaces/rule.Assertion.html">Assertion</a> against a <a href="../interfaces/template.CloudFormationTemplate.html">CloudFormationTemplate</a>&#39;s <a href="../interfaces/function.FnTransform.html#__type.Parameters">Parameters</a>.</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>assertion: <a href="../interfaces/rule.Assertion.html" class="tsd-signature-type" data-tsd-kind="Interface">Assertion</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/rule.Assertion.html">Assertion</a> condition to evaluate.</p>
+									</div>
+								</li>
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/stack.UpdateState.html">UpdateState</a> of the current evaluation.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">&gt;</span></h4>
+							<p>an array of <a href="../interfaces/rule.Assertion.html">Assertion</a> errors.</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="evaluateExpr" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> evaluate<wbr>Expr</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">evaluate<wbr>Expr<span class="tsd-signature-symbol">(</span>expr<span class="tsd-signature-symbol">: </span><a href="../modules/expression.html#Expression" class="tsd-signature-type" data-tsd-kind="Type alias">Expression</a>, state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../modules/value.html#Value" class="tsd-signature-type" data-tsd-kind="Type alias">Value</a><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Evaluates an <a href="../modules/expression.html#Expression">Expression</a> to a {@link PhysicalProperty}.</p>
+								</div>
+								<p>This property may come from evaluating an intrinsic function or by fetching
+								an attribute from a physically deployed resource.</p>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>expr: <a href="../modules/expression.html#Expression" class="tsd-signature-type" data-tsd-kind="Type alias">Expression</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>expression to evaluate</p>
+									</div>
+								</li>
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/stack.UpdateState.html">UpdateState</a> being evaluated</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../modules/value.html#Value" class="tsd-signature-type" data-tsd-kind="Type alias">Value</a><span class="tsd-signature-symbol">&gt;</span></h4>
+							<p>the physical property as a primitive JSON object</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="evaluateIntrinsicFunction" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> evaluate<wbr>Intrinsic<wbr>Function</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">evaluate<wbr>Intrinsic<wbr>Function<span class="tsd-signature-symbol">(</span>state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a>, expr<span class="tsd-signature-symbol">: </span><a href="../modules/function.html#IntrinsicFunction" class="tsd-signature-type" data-tsd-kind="Type alias">IntrinsicFunction</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../modules/value.html#Value" class="tsd-signature-type" data-tsd-kind="Type alias">Value</a><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Evaluate a CloudFormation <a href="../modules/function.html#IntrinsicFunction">IntrinsicFunction</a> to a {@link PhysicalProperty}.</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+								</li>
+								<li>
+									<h5>expr: <a href="../modules/function.html#IntrinsicFunction" class="tsd-signature-type" data-tsd-kind="Type alias">IntrinsicFunction</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>intrinsic function expression</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../modules/value.html#Value" class="tsd-signature-type" data-tsd-kind="Type alias">Value</a><span class="tsd-signature-symbol">&gt;</span></h4>
+							<p>the physical value of the function</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="evaluateParameter" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> evaluate<wbr>Parameter</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">evaluate<wbr>Parameter<span class="tsd-signature-symbol">(</span>state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a>, paramName<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span>, paramDef<span class="tsd-signature-symbol">: </span><a href="../interfaces/parameter.Parameter.html" class="tsd-signature-type" data-tsd-kind="Interface">Parameter</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../modules/value.html#Value" class="tsd-signature-type" data-tsd-kind="Type alias">Value</a><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Determine the value of a {@link paramName}.</p>
+								</div>
+								<p>If the <a href="../interfaces/parameter.Parameter.html">Parameter</a> is a <a href="../modules/parameter.html#SSMParameterType">SSMParameterType</a> then the value is fetched
+								from AWS Systems Manager Parameter Store.</p>
+								<p>The <a href="../interfaces/template.CloudFormationTemplate.html">CloudFormationTemplate</a>&#39;s <a href="../interfaces/parameter.Parameter.html">Parameter</a>s and the input <a href="../interfaces/parameter.ParameterValues.html">ParameterValues</a>
+									are assumed to be valid because the <a href="stack.Stack.html#validateParameters">validateParameters</a> function is called by
+								<a href="stack.Stack.html#updateStack">updateStack</a>.</p>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p><a href="../interfaces/stack.UpdateState.html">UpdateState</a> being evaluated.</p>
+									</div>
+								</li>
+								<li>
+									<h5>paramName: <span class="tsd-signature-type">string</span></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>name of the <a href="../interfaces/parameter.Parameter.html">Parameter</a>.</p>
+									</div>
+								</li>
+								<li>
+									<h5>paramDef: <a href="../interfaces/parameter.Parameter.html" class="tsd-signature-type" data-tsd-kind="Interface">Parameter</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/parameter.Parameter.html">Parameter</a> definition in the source <a href="../interfaces/template.CloudFormationTemplate.html">CloudFormationTemplate</a>.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../modules/value.html#Value" class="tsd-signature-type" data-tsd-kind="Type alias">Value</a><span class="tsd-signature-symbol">&gt;</span></h4>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="evaluatePseudoParameter" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> evaluate<wbr>Pseudo<wbr>Parameter</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">evaluate<wbr>Pseudo<wbr>Parameter<span class="tsd-signature-symbol">(</span>expr<span class="tsd-signature-symbol">: </span><a href="../modules/pseudo_parameter.html#PseudoParameter" class="tsd-signature-type" data-tsd-kind="Type alias">PseudoParameter</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">null</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">never</span><span class="tsd-signature-symbol">[]</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Evaluate a <a href="../modules/parameter.html#PseudoParameter">PseudoParameter</a> and return its value.</p>
+								</div>
+								<dl class="tsd-comment-tags">
+									<dt>see</dt>
+									<dd><p><a href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/pseudo-parameter-reference.html">https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/pseudo-parameter-reference.html</a></p>
+									</dd>
+								</dl>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>expr: <a href="../modules/pseudo_parameter.html#PseudoParameter" class="tsd-signature-type" data-tsd-kind="Type alias">PseudoParameter</a></h5>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">null</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol"> | </span><span class="tsd-signature-type">never</span><span class="tsd-signature-symbol">[]</span></h4>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="evaluateRule" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> evaluate<wbr>Rule</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">evaluate<wbr>Rule<span class="tsd-signature-symbol">(</span>rule<span class="tsd-signature-symbol">: </span><a href="../interfaces/rule.Rule.html" class="tsd-signature-type" data-tsd-kind="Interface">Rule</a>, state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Evaluates a <a href="../interfaces/rule.Rule.html">Rule</a> and returns an array of <a href="../interfaces/rule.Assertion.html">Assertion</a> errors.</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>rule: <a href="../interfaces/rule.Rule.html" class="tsd-signature-type" data-tsd-kind="Interface">Rule</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/rule.Rule.html">Rule</a> to evaluate.</p>
+									</div>
+								</li>
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/stack.UpdateState.html">UpdateState</a> of the current evaluation.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">[]</span><span class="tsd-signature-symbol">&gt;</span></h4>
+							<p>an array of <a href="../interfaces/rule.Assertion.html">Assertion</a> errors.</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="evaluateRuleExpressionToBoolean" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> evaluate<wbr>Rule<wbr>Expression<wbr>ToBoolean</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">evaluate<wbr>Rule<wbr>Expression<wbr>ToBoolean<span class="tsd-signature-symbol">(</span>rule<span class="tsd-signature-symbol">: </span><a href="../modules/rule.html#RuleFunction" class="tsd-signature-type" data-tsd-kind="Type alias">RuleFunction</a>, state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Evaluate a <a href="../modules/rule.html#RuleFunction">RuleFunction</a> to a <code>boolean</code>.</p>
+								</div>
+								<dl class="tsd-comment-tags">
+									<dt>throws</dt>
+									<dd><p>an Error if the <a href="../modules/rule.html">rule</a> does not evaluate to a <code>boolean</code>.</p>
+									</dd>
+								</dl>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>rule: <a href="../modules/rule.html#RuleFunction" class="tsd-signature-type" data-tsd-kind="Type alias">RuleFunction</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../modules/rule.html#RuleFunction">RuleFunction</a> to evaluate.</p>
+									</div>
+								</li>
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/stack.UpdateState.html">UpdateState</a> of the current evaluation.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">boolean</span><span class="tsd-signature-symbol">&gt;</span></h4>
+							<p>the evaluated <code>boolean</code> value of the <a href="../modules/rule.html">rule</a>.</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="getLogicalResource" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> get<wbr>Logical<wbr>Resource</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">get<wbr>Logical<wbr>Resource<span class="tsd-signature-symbol">(</span>logicalId<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span>, state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><a href="../interfaces/resource.LogicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">LogicalResource</a></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Get the <a href="../interfaces/resource.LogicalResource.html">LogicalResource</a> by its {@link logicalId}.</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>logicalId: <span class="tsd-signature-type">string</span></h5>
+								</li>
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <a href="../interfaces/resource.LogicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">LogicalResource</a></h4>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="getPhysicalResource" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> get<wbr>Physical<wbr>Resource</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">get<wbr>Physical<wbr>Resource<span class="tsd-signature-symbol">(</span>logicalId<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/resource.PhysicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalResource</a></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Get the <a href="../interfaces/resource.PhysicalResource.html">PhysicalResource</a> by its {@link logicalId}.</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>logicalId: <span class="tsd-signature-type">string</span></h5>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/resource.PhysicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalResource</a></h4>
+							<p>the <a href="../interfaces/resource.PhysicalResource.html">PhysicalResource</a> if it exists, otherwise <code>undefined</code>.</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class">
+					<a name="getState" class="tsd-anchor"></a>
+					<h3>get<wbr>State</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class">
+						<li class="tsd-signature tsd-kind-icon">get<wbr>State<span class="tsd-signature-symbol">(</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/stack.StackState.html" class="tsd-signature-type" data-tsd-kind="Interface">StackState</a></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/stack.StackState.html" class="tsd-signature-type" data-tsd-kind="Interface">StackState</a></h4>
+							<p>the current <a href="../interfaces/stack.StackState.html">StackState</a>.</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="updateResource" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> update<wbr>Resource</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">update<wbr>Resource<span class="tsd-signature-symbol">(</span>state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a>, logicalId<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/resource.PhysicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalResource</a><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Deploy a <a href="../interfaces/resource.LogicalResource.html">LogicalResource</a> to AWS.</p>
+								</div>
+								<p>This Function will recursively deploy any dependent resoruces.</p>
+								<p>TODO: intelligently support rollbacks.</p>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/stack.UpdateState.html">UpdateState</a> being evaluated.</p>
+									</div>
+								</li>
+								<li>
+									<h5>logicalId: <span class="tsd-signature-type">string</span></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>Logical ID of the <a href="../interfaces/resource.LogicalResource.html">LogicalResource</a> to deploy.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/resource.PhysicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalResource</a><span class="tsd-signature-symbol">&gt;</span></h4>
+							<p>data describing the <a href="../interfaces/resource.PhysicalResource.html">PhysicalResource</a>.</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class">
+					<a name="updateStack" class="tsd-anchor"></a>
+					<h3>update<wbr>Stack</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class">
+						<li class="tsd-signature tsd-kind-icon">update<wbr>Stack<span class="tsd-signature-symbol">(</span>desiredState<span class="tsd-signature-symbol">: </span><a href="../interfaces/template.CloudFormationTemplate.html" class="tsd-signature-type" data-tsd-kind="Interface">CloudFormationTemplate</a>, parameterValues<span class="tsd-signature-symbol">?: </span><a href="../interfaces/parameter.ParameterValues.html" class="tsd-signature-type" data-tsd-kind="Interface">ParameterValues</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/stack.StackState.html" class="tsd-signature-type" data-tsd-kind="Interface">StackState</a><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Deploy all <a href="../interfaces/resource.LogicalResource.html">LogicalResource</a>s in this {@link CloudFormationStack}</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>desiredState: <a href="../interfaces/template.CloudFormationTemplate.html" class="tsd-signature-type" data-tsd-kind="Interface">CloudFormationTemplate</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>a <a href="../interfaces/template.CloudFormationTemplate.html">CloudFormationTemplate</a> describing the Desired State of this <a href="stack.Stack.html">Stack</a>.</p>
+									</div>
+								</li>
+								<li>
+									<h5><span class="tsd-flag ts-flagOptional">Optional</span> parameterValues: <a href="../interfaces/parameter.ParameterValues.html" class="tsd-signature-type" data-tsd-kind="Interface">ParameterValues</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>input values of the <a href="../interfaces/function.FnTransform.html#__type.Parameters">Parameters</a>.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/stack.StackState.html" class="tsd-signature-type" data-tsd-kind="Interface">StackState</a><span class="tsd-signature-symbol">&gt;</span></h4>
+							<p>the new <a href="../interfaces/stack.StackState.html">StackState</a>.</p>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="validateParameters" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> validate<wbr>Parameters</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">validate<wbr>Parameters<span class="tsd-signature-symbol">(</span>template<span class="tsd-signature-symbol">: </span><a href="../interfaces/template.CloudFormationTemplate.html" class="tsd-signature-type" data-tsd-kind="Interface">CloudFormationTemplate</a>, parameterValues<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/parameter.ParameterValues.html" class="tsd-signature-type" data-tsd-kind="Interface">ParameterValues</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Validate the <a href="../interfaces/stack.UpdateState.html#parameterValues">parameterValues</a> against the <a href="../interfaces/parameter.Parameter.html">Parameter</a> defintiions in the {@link template}.</p>
+								</div>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>template: <a href="../interfaces/template.CloudFormationTemplate.html" class="tsd-signature-type" data-tsd-kind="Interface">CloudFormationTemplate</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/template.CloudFormationTemplate.html">CloudFormationTemplate</a></p>
+									</div>
+								</li>
+								<li>
+									<h5>parameterValues: <span class="tsd-signature-type">undefined</span><span class="tsd-signature-symbol"> | </span><a href="../interfaces/parameter.ParameterValues.html" class="tsd-signature-type" data-tsd-kind="Interface">ParameterValues</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>input <a href="../interfaces/parameter.ParameterValues.html">ParameterValues</a>.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="validateRules" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> validate<wbr>Rules</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">validate<wbr>Rules<span class="tsd-signature-symbol">(</span>rules<span class="tsd-signature-symbol">: </span><a href="../interfaces/rule.Rules.html" class="tsd-signature-type" data-tsd-kind="Interface">Rules</a>, state<span class="tsd-signature-symbol">: </span><a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<div class="tsd-comment tsd-typography">
+								<div class="lead">
+									<p>Validate the <a href="../interfaces/rule.Rules.html">Rules</a> section of a <a href="../interfaces/template.CloudFormationTemplate.html">CloudFormationTemplate</a>.</p>
+								</div>
+								<p>For each <a href="../interfaces/rule.Rule.html">Rule</a>, validate that the <a href="../interfaces/stack.UpdateState.html#parameterValues">parameterValues</a> comply with the <a href="../interfaces/rule.Rule.html#Assertions">Assertions</a>.</p>
+							</div>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>rules: <a href="../interfaces/rule.Rules.html" class="tsd-signature-type" data-tsd-kind="Interface">Rules</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/rule.Rules.html">Rules</a> section of a <a href="../interfaces/template.CloudFormationTemplate.html">CloudFormationTemplate</a>.</p>
+									</div>
+								</li>
+								<li>
+									<h5>state: <a href="../interfaces/stack.UpdateState.html" class="tsd-signature-type" data-tsd-kind="Interface">UpdateState</a></h5>
+									<div class="tsd-comment tsd-typography">
+										<p>the <a href="../interfaces/stack.UpdateState.html">UpdateState</a> of the current evaluation.</p>
+									</div>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><span class="tsd-signature-type">void</span><span class="tsd-signature-symbol">&gt;</span></h4>
+						</li>
+					</ul>
+				</section>
+				<section class="tsd-panel tsd-member tsd-kind-method tsd-parent-kind-class tsd-is-private">
+					<a name="waitForProgress" class="tsd-anchor"></a>
+					<h3><span class="tsd-flag ts-flagPrivate">Private</span> wait<wbr>For<wbr>Progress</h3>
+					<ul class="tsd-signatures tsd-kind-method tsd-parent-kind-class tsd-is-private">
+						<li class="tsd-signature tsd-kind-icon">wait<wbr>For<wbr>Progress<span class="tsd-signature-symbol">(</span>logicalId<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span>, type<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">string</span>, properties<span class="tsd-signature-symbol">: </span><a href="../interfaces/resource.PhysicalProperties.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalProperties</a>, progress<span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">ProgressEvent</span><span class="tsd-signature-symbol">)</span><span class="tsd-signature-symbol">: </span><span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/resource.PhysicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalResource</a><span class="tsd-signature-symbol">&gt;</span></li>
+					</ul>
+					<ul class="tsd-descriptions">
+						<li class="tsd-description">
+							<aside class="tsd-sources">
+							</aside>
+							<h4 class="tsd-parameters-title">Parameters</h4>
+							<ul class="tsd-parameters">
+								<li>
+									<h5>logicalId: <span class="tsd-signature-type">string</span></h5>
+								</li>
+								<li>
+									<h5>type: <span class="tsd-signature-type">string</span></h5>
+								</li>
+								<li>
+									<h5>properties: <a href="../interfaces/resource.PhysicalProperties.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalProperties</a></h5>
+								</li>
+								<li>
+									<h5>progress: <span class="tsd-signature-type">ProgressEvent</span></h5>
+								</li>
+							</ul>
+							<h4 class="tsd-returns-title">Returns <span class="tsd-signature-type">Promise</span><span class="tsd-signature-symbol">&lt;</span><a href="../interfaces/resource.PhysicalResource.html" class="tsd-signature-type" data-tsd-kind="Interface">PhysicalResource</a><span class="tsd-signature-symbol">&gt;</span></h4>
+						</li>
+					</ul>
+				</section>
+			</section>
+		</div>
+		<div class="col-4 col-menu menu-sticky-wrap menu-highlight">
+			<nav class="tsd-navigation primary">
+				<ul>
+					<li class=" ">
+						<a href="../modules.html">Modules</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/condition.html">condition</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/expression.html">expression</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/function.html">function</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/graph.html">graph</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/main.html">main</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/mapping.html">mapping</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/metadata.html">metadata</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/output.html">output</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/parameter.html">parameter</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/pseudo_parameter.html">pseudo-<wbr>parameter</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/resource.html">resource</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/rule.html">rule</a>
+					</li>
+					<li class="current tsd-kind-module">
+						<a href="../modules/stack.html">stack</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/template.html">template</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/transform.html">transform</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/util.html">util</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="../modules/value.html">value</a>
+					</li>
+				</ul>
+			</nav>
+			<nav class="tsd-navigation secondary menu-sticky">
+				<ul class="before-current">
+				</ul>
+				<ul class="current">
+					<li class="current tsd-kind-class tsd-parent-kind-module">
+						<a href="stack.Stack.html" class="tsd-kind-icon">Stack</a>
+						<ul>
+							<li class=" tsd-kind-constructor tsd-parent-kind-class">
+								<a href="stack.Stack.html#constructor" class="tsd-kind-icon">constructor</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-class">
+								<a href="stack.Stack.html#account" class="tsd-kind-icon">account</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-class">
+								<a href="stack.Stack.html#controlClient" class="tsd-kind-icon">control<wbr>Client</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-class">
+								<a href="stack.Stack.html#region" class="tsd-kind-icon">region</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-class">
+								<a href="stack.Stack.html#ssmClient" class="tsd-kind-icon">ssm<wbr>Client</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-class">
+								<a href="stack.Stack.html#stackName" class="tsd-kind-icon">stack<wbr>Name</a>
+							</li>
+							<li class=" tsd-kind-property tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#state" class="tsd-kind-icon">state</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#deleteResource" class="tsd-kind-icon">delete<wbr>Resource</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#deleteResources" class="tsd-kind-icon">delete<wbr>Resources</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class">
+								<a href="stack.Stack.html#deleteStack" class="tsd-kind-icon">delete<wbr>Stack</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#evaluateAssertion" class="tsd-kind-icon">evaluate<wbr>Assertion</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#evaluateExpr" class="tsd-kind-icon">evaluate<wbr>Expr</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#evaluateIntrinsicFunction" class="tsd-kind-icon">evaluate<wbr>Intrinsic<wbr>Function</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#evaluateParameter" class="tsd-kind-icon">evaluate<wbr>Parameter</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#evaluatePseudoParameter" class="tsd-kind-icon">evaluate<wbr>Pseudo<wbr>Parameter</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#evaluateRule" class="tsd-kind-icon">evaluate<wbr>Rule</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#evaluateRuleExpressionToBoolean" class="tsd-kind-icon">evaluate<wbr>Rule<wbr>Expression<wbr>ToBoolean</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#getLogicalResource" class="tsd-kind-icon">get<wbr>Logical<wbr>Resource</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#getPhysicalResource" class="tsd-kind-icon">get<wbr>Physical<wbr>Resource</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class">
+								<a href="stack.Stack.html#getState" class="tsd-kind-icon">get<wbr>State</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#updateResource" class="tsd-kind-icon">update<wbr>Resource</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class">
+								<a href="stack.Stack.html#updateStack" class="tsd-kind-icon">update<wbr>Stack</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#validateParameters" class="tsd-kind-icon">validate<wbr>Parameters</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#validateRules" class="tsd-kind-icon">validate<wbr>Rules</a>
+							</li>
+							<li class=" tsd-kind-method tsd-parent-kind-class tsd-is-private">
+								<a href="stack.Stack.html#waitForProgress" class="tsd-kind-icon">wait<wbr>For<wbr>Progress</a>
+							</li>
+						</ul>
+					</li>
+				</ul>
+				<ul class="after-current">
+					<li class=" tsd-kind-interface tsd-parent-kind-module">
+						<a href="../interfaces/stack.StackProps.html" class="tsd-kind-icon">Stack<wbr>Props</a>
+					</li>
+					<li class=" tsd-kind-interface tsd-parent-kind-module">
+						<a href="../interfaces/stack.StackState.html" class="tsd-kind-icon">Stack<wbr>State</a>
+					</li>
+					<li class=" tsd-kind-interface tsd-parent-kind-module">
+						<a href="../interfaces/stack.UpdateState.html" class="tsd-kind-icon">Update<wbr>State</a>
+					</li>
+				</ul>
+			</nav>
+		</div>
+	</div>
+</div>
+<footer class="with-border-bottom">
+	<div class="container">
+		<h2>Legend</h2>
+		<div class="tsd-legend-group">
+			<ul class="tsd-legend">
+				<li class="tsd-kind-class"><span class="tsd-kind-icon">Class</span></li>
+				<li class="tsd-kind-constructor tsd-parent-kind-class"><span class="tsd-kind-icon">Constructor</span></li>
+				<li class="tsd-kind-property tsd-parent-kind-class"><span class="tsd-kind-icon">Property</span></li>
+				<li class="tsd-kind-method tsd-parent-kind-class"><span class="tsd-kind-icon">Method</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-function"><span class="tsd-kind-icon">Function</span></li>
+				<li class="tsd-kind-function tsd-has-type-parameter"><span class="tsd-kind-icon">Function with type parameter</span></li>
+				<li class="tsd-kind-type-alias"><span class="tsd-kind-icon">Type alias</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-property tsd-parent-kind-class tsd-is-private"><span class="tsd-kind-icon">Private property</span></li>
+				<li class="tsd-kind-method tsd-parent-kind-class tsd-is-private"><span class="tsd-kind-icon">Private method</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-enum"><span class="tsd-kind-icon">Enumeration</span></li>
+			</ul>
+			<ul class="tsd-legend">
+				<li class="tsd-kind-interface"><span class="tsd-kind-icon">Interface</span></li>
+			</ul>
+		</div>
+	</div>
+</footer>
+<div class="container tsd-generator">
+	<p>Generated using <a href="https://typedoc.org/" target="_blank">TypeDoc</a></p>
+</div>
+<div class="overlay"></div>
+<script src="../assets/js/main.js"></script>
+</body>
+</html>
