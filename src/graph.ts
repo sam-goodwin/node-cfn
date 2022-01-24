@@ -12,6 +12,9 @@ import {
 } from "./function";
 import { CloudFormationTemplate } from "./template";
 
+// @ts-ignore - for tsdoc
+import type { Stack } from "./stack";
+
 /**
  * Maps a Logical ID to the Logical IDs it depends on.
  */
@@ -106,7 +109,23 @@ function findReferences(expr: Expression): string[] {
       return Object.values(expr["Fn::Sub"][1]).flatMap(findReferences);
     } else if (isFnBase64(expr)) {
       return findReferences(expr["Fn::Base64"]);
-    }
+    } // TODO: RuleFunctions
   }
   return [];
+}
+
+/**
+ * Return the `logicalId`s from {@link prevState} that do not exist in the {@link desiredState}.
+ *
+ * @param prevState the previous {@link CloudFormationTemplate} of a {@link Stack}.
+ * @param desiredState the new (desired) {@link CloudFormationTemplate} for a {@link Stack}.
+ * @returns an array of all `logicalId`s from {@link prevState} that do not exist in the {@link desiredState}.
+ */
+export function discoverOrphanedDependencies(
+  prevState: CloudFormationTemplate,
+  desiredState: CloudFormationTemplate
+): string[] {
+  const oldIds = new Set(Object.keys(prevState.Resources));
+  const newIds = new Set(Object.keys(desiredState.Resources));
+  return Array.from(oldIds).filter((oldId) => !newIds.has(oldId));
 }

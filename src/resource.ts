@@ -4,7 +4,11 @@ import type {
   UpdateResourceCommand,
 } from "@aws-sdk/client-cloudcontrol";
 
-import type { EvaluatedExpression, Expression } from "./expression";
+// @ts-ignore - imported for type-doc
+import type { IntrinsicFunction } from "./function";
+
+import { Expression } from "./expression";
+import { Value } from "./value";
 
 /**
  * The required {@link Resources} section declares the AWS resources that you want to include in the stack, such as an Amazon EC2 instance or an Amazon S3 bucket.
@@ -44,6 +48,12 @@ export interface LogicalResource {
    * With the DeletionPolicy attribute you can preserve, and in some cases, backup a resource when its stack is deleted.
    */
   DeletionPolicy?: DeletionPolicy;
+  /**
+   * You can use {@link IntrinsicFunction}s to conditionally create stack resources.
+   *
+   * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference-conditions.html
+   */
+  Condition?: string;
 }
 
 /**
@@ -97,5 +107,5 @@ export interface PhysicalResource {
  * Map of `propertyName` to its {@link EvaluatedExpression} value.
  */
 export interface PhysicalProperties {
-  [propertyName: string]: EvaluatedExpression;
+  [propertyName: string]: Value;
 }

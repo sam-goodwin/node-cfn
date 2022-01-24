@@ -1,7 +1,5 @@
 import { deepStrictEqual } from "assert";
-import { EvaluatedExpression } from "./expression";
-import { validateRules } from "./rule";
-import { CloudFormationTemplate } from "./template";
+import { Value } from "./value";
 
 /**
  * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/parameters-section-structure.html
@@ -14,7 +12,7 @@ export interface Parameters {
  * Input values for {@link Parameters}.
  */
 export interface ParameterValues {
-  [parameterName: string]: EvaluatedExpression;
+  [parameterName: string]: Value;
 }
 
 /**
@@ -74,52 +72,16 @@ export interface Parameter {
 }
 
 /**
- * Validate the {@link parameterValues} against the {@link Parameter} defintiions in the {@link template}.
- *
- * @param template the {@link CloudFormationTemplate}
- * @param parameterValues input {@link ParameterValues}.
- */
-export function validateParameters(
-  template: CloudFormationTemplate,
-  parameterValues: ParameterValues | undefined
-) {
-  if (template.Parameters === undefined) {
-    if (
-      parameterValues !== undefined &&
-      Object.keys(parameterValues).length > 0
-    ) {
-      throw new Error(
-        `the template accepts no Parameters, but Parameters were passed to the Template`
-      );
-    }
-  } else {
-    for (const [paramName, paramDef] of Object.entries(template.Parameters)) {
-      const paramVal = parameterValues?.[paramName];
-
-      validateParameter(paramName, paramDef, paramVal);
-    }
-
-    if (template.Rules) {
-      validateRules(
-        template.Rules,
-        template.Parameters ?? {},
-        parameterValues ?? {}
-      );
-    }
-  }
-}
-
-/**
  * Validate the value of a {@link Parameter} against its type definition.
  *
  * @param paramName name of the {@link Parameter}
  * @param paramDef the {@link Parameter} definition (defined the template).
  * @param paramVal the input value of the {@link Parameter}.
  */
-function validateParameter(
+export function validateParameter(
   paramName: string,
   paramDef: Parameter,
-  paramVal: EvaluatedExpression
+  paramVal: Value
 ) {
   const type = paramDef.Type;
 

@@ -10,20 +10,30 @@ export async function main() {
     stackName: "my-stack",
   });
 
-  let state = await deployer.updateStack(template(1), {
+  let state = await deployer.updateStack(template(0), {
     HashKey: "Album",
   });
   console.log("Create", state);
 
-  // state = await deployer.updateStack(template(2));
-  // console.log("Update", state);
+  // this update should delete the orhanned stream
+  state = await deployer.updateStack(template(1), {
+    HashKey: "Album",
+  });
 
+  console.log("Update", state);
+
+  // delete the whole stack
   await deployer.deleteStack();
 }
 
-function template(ShardCount: number): CloudFormationTemplate {
-  return {
+function template(version: number): CloudFormationTemplate {
+  const template: CloudFormationTemplate = {
     AWSTemplateFormatVersion: "2010-09-09",
+    Conditions: {
+      NoTable: {
+        "Fn::Not": [{ "Fn::Equals": [{ Ref: "HashKey" }, "Album"] }],
+      },
+    },
     Parameters: {
       HashKey: {
         Type: "String",
@@ -42,115 +52,115 @@ function template(ShardCount: number): CloudFormationTemplate {
       },
     },
     Resources: {
-      myDynamoDBTable: {
-        Type: "AWS::DynamoDB::Table",
-        Properties: {
-          AttributeDefinitions: [
-            {
-              AttributeName: "Album",
-              AttributeType: "S",
-            },
-            {
-              AttributeName: "Artist",
-              AttributeType: "S",
-            },
-            {
-              AttributeName: "Sales",
-              AttributeType: "N",
-            },
-            {
-              AttributeName: "NumberOfSongs",
-              AttributeType: "N",
-            },
-          ],
-          KeySchema: [
-            {
-              AttributeName: "Album",
-              KeyType: "HASH",
-            },
-            {
-              AttributeName: "Artist",
-              KeyType: "RANGE",
-            },
-          ],
-          BillingMode: "PAY_PER_REQUEST",
-          TableName: "myTableName",
-          GlobalSecondaryIndexes: [
-            {
-              IndexName: "myGSI",
-              KeySchema: [
-                {
-                  AttributeName: "Sales",
-                  KeyType: "HASH",
-                },
-                {
-                  AttributeName: "Artist",
-                  KeyType: "RANGE",
-                },
-              ],
-              Projection: {
-                NonKeyAttributes: ["Album", "NumberOfSongs"],
-                ProjectionType: "INCLUDE",
-              },
-            },
-            {
-              IndexName: "myGSI2",
-              KeySchema: [
-                {
-                  AttributeName: "NumberOfSongs",
-                  KeyType: "HASH",
-                },
-                {
-                  AttributeName: "Sales",
-                  KeyType: "RANGE",
-                },
-              ],
-              Projection: {
-                NonKeyAttributes: ["Album", "Artist"],
-                ProjectionType: "INCLUDE",
-              },
-            },
-          ],
-          LocalSecondaryIndexes: [
-            {
-              IndexName: "myLSI",
-              KeySchema: [
-                {
-                  AttributeName: "Album",
-                  KeyType: "HASH",
-                },
-                {
-                  AttributeName: "Sales",
-                  KeyType: "RANGE",
-                },
-              ],
-              Projection: {
-                NonKeyAttributes: ["Artist", "NumberOfSongs"],
-                ProjectionType: "INCLUDE",
-              },
-            },
-          ],
-        },
-      },
-      // MyStream: {
-      //   Type: "AWS::Kinesis::Stream",
-      //   DeletionPolicy: DeletionPolicy.Retain,
+      // myDynamoDBTable: {
+      //   Type: "AWS::DynamoDB::Table",
+      //   // Condition: "NoTable",
       //   Properties: {
-      //     Name: "MyKinesisStream",
-      //     RetentionPeriodHours: 168,
-      //     ShardCount,
-      //     // StreamEncryption: {
-      //     //   EncryptionType: "KMS",
-      //     //   KeyId: "!Ref myKey",
-      //     // },
-      //     Tags: [
+      //     AttributeDefinitions: [
       //       {
-      //         Key: "Environment",
-      //         Value: "Production",
+      //         AttributeName: "Album",
+      //         AttributeType: "S",
+      //       },
+      //       {
+      //         AttributeName: "Artist",
+      //         AttributeType: "S",
+      //       },
+      //       {
+      //         AttributeName: "Sales",
+      //         AttributeType: "N",
+      //       },
+      //       {
+      //         AttributeName: "NumberOfSongs",
+      //         AttributeType: "N",
+      //       },
+      //     ],
+      //     KeySchema: [
+      //       {
+      //         AttributeName: "Album",
+      //         KeyType: "HASH",
+      //       },
+      //       {
+      //         AttributeName: "Artist",
+      //         KeyType: "RANGE",
+      //       },
+      //     ],
+      //     BillingMode: "PAY_PER_REQUEST",
+      //     TableName: "myTableName",
+      //     GlobalSecondaryIndexes: [
+      //       {
+      //         IndexName: "myGSI",
+      //         KeySchema: [
+      //           {
+      //             AttributeName: "Sales",
+      //             KeyType: "HASH",
+      //           },
+      //           {
+      //             AttributeName: "Artist",
+      //             KeyType: "RANGE",
+      //           },
+      //         ],
+      //         Projection: {
+      //           NonKeyAttributes: ["Album", "NumberOfSongs"],
+      //           ProjectionType: "INCLUDE",
+      //         },
+      //       },
+      //       {
+      //         IndexName: "myGSI2",
+      //         KeySchema: [
+      //           {
+      //             AttributeName: "NumberOfSongs",
+      //             KeyType: "HASH",
+      //           },
+      //           {
+      //             AttributeName: "Sales",
+      //             KeyType: "RANGE",
+      //           },
+      //         ],
+      //         Projection: {
+      //           NonKeyAttributes: ["Album", "Artist"],
+      //           ProjectionType: "INCLUDE",
+      //         },
+      //       },
+      //     ],
+      //     LocalSecondaryIndexes: [
+      //       {
+      //         IndexName: "myLSI",
+      //         KeySchema: [
+      //           {
+      //             AttributeName: "Album",
+      //             KeyType: "HASH",
+      //           },
+      //           {
+      //             AttributeName: "Sales",
+      //             KeyType: "RANGE",
+      //           },
+      //         ],
+      //         Projection: {
+      //           NonKeyAttributes: ["Artist", "NumberOfSongs"],
+      //           ProjectionType: "INCLUDE",
+      //         },
       //       },
       //     ],
       //   },
       // },
+      MyStream: {
+        Type: "AWS::Kinesis::Stream",
+        Properties: {
+          Name: "MyKinesisStream",
+          RetentionPeriodHours: 168,
+          ShardCount: 1,
+          // StreamEncryption: {
+          //   EncryptionType: "KMS",
+          //   KeyId: "!Ref myKey",
+          // },
+          Tags: [
+            {
+              Key: "Environment",
+              Value: "Production",
+            },
+          ],
+        },
+      },
       // myKey: {
       //   Type: "AWS::KMS::Key",
       //   Properties: {
@@ -176,6 +186,13 @@ function template(ShardCount: number): CloudFormationTemplate {
       // },
     },
   };
+
+  if (version === 1) {
+    // delete MyStream
+    delete (template.Resources as any).MyStream;
+  }
+
+  return template;
 }
 
 main().catch((err) => {

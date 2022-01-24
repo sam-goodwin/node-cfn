@@ -2,28 +2,46 @@ import * as control from "@aws-sdk/client-cloudcontrol";
 import * as ssm from "@aws-sdk/client-ssm";
 
 import { compare } from "fast-json-patch";
-import { EvaluatedExpression, Expression } from "./expression";
+import { Expression } from "./expression";
 import {
   IntrinsicFunction,
+  isFnAnd,
   isFnBase64,
+  isFnContains,
+  isFnEachMemberEquals,
+  isFnEachMemberIn,
+  isFnEquals,
   isFnFindInMap,
   isFnGetAtt,
+  isFnIf,
   isFnJoin,
+  isFnNot,
+  isFnOr,
+  isFnRefAll,
   isFnSelect,
   isFnSplit,
   isFnSub,
+  isFnValueOf,
+  isFnValueOfAll,
   isIntrinsicFunction,
   isRef,
+  isRefString,
+  parseRefString,
 } from "./function";
-import { buildDependencyGraph, DependencyGraph } from "./graph";
+import {
+  buildDependencyGraph,
+  DependencyGraph,
+  discoverOrphanedDependencies,
+} from "./graph";
 
 import {
   // @ts-ignore - imported for typedoc
   SSMParameterType,
   Parameter,
   ParameterValues,
-  validateParameters,
+  validateParameter,
 } from "./parameter";
+import { isPseudoParameter, PseudoParameter } from "./pseudo-parameter";
 import {
   PhysicalResource,
   PhysicalResources,
@@ -32,7 +50,11 @@ import {
   ResourceType,
   DeletionPolicy,
 } from "./resource";
+import { Assertion, Rule, RuleFunction, Rules } from "./rule";
+
 import { CloudFormationTemplate } from "./template";
+import { isDeepEqual } from "./util";
+import { Value } from "./value";
 
 /**
  * A map of each {@link LogicalResource}'s Logical ID to its {@link PhysicalProperties}.
@@ -50,26 +72,34 @@ export interface StackState {
 
 export interface UpdateState {
   /**
+   * The previous {@link CloudFormationTemplate} which triggered the `Update`.
+   *
+   * This is `undefined` when a {@link Stack} is first deployed.
+   */
+  previousState: CloudFormationTemplate | undefined;
+  /**
+   * The {@link previousState}'s {@link DependencyGraph}.
+   */
+  previousDependencyGraph: DependencyGraph | undefined;
+  /**
    * The new {@link CloudFormationTemplate} which triggered the `Update`.
    *
-   * For the `Create`/`Update` operations, this is the (new) desired state of the {@link Stack}.
-   *
-   * For the `Delete` operation, this refers to the template which last Created/Updated the {@link Stack}.
+   * This is `undefined` when a {@link Stack} is being deleted..
    */
-  template: CloudFormationTemplate;
+  desiredState: CloudFormationTemplate | undefined;
   /**
-   * The {@link template}'s {@link DependencyGraph}.
+   * The {@link desiredState}'s {@link DependencyGraph}.
    */
-  dependencyGraph: DependencyGraph;
+  desiredDependencyGraph: DependencyGraph | undefined;
   /**
-   * Input {@link ParameterValues} for the {@link template}'s {@link Parameters}.
+   * Input {@link ParameterValues} for the {@link desiredState}'s {@link Parameters}.
    */
   parameterValues?: ParameterValues;
   /**
    * Map of `logicalId` to a task ({@link Promise}) resolving the new state of the {@link PhysicalResource}.
    */
   tasks: {
-    [logicalId: string]: Promise<PhysicalResource>;
+    [logicalId: string]: Promise<PhysicalResource | undefined>;
   };
 }
 
@@ -171,16 +201,18 @@ export class Stack {
    * Get the {@link LogicalResource} by its {@link logicalId}.
    */
   private getLogicalResource(
-    state: UpdateState,
-    logicalId: string
+    logicalId: string,
+    state: UpdateState
   ): LogicalResource {
-    const resource = state.template.Resources[logicalId];
+    const resource =
+      state.desiredState?.Resources[logicalId] ??
+      state.previousState?.Resources[logicalId];
     if (resource === undefined) {
       throw new Error(`resource does not exist: '${logicalId}'`);
     }
     if (resource.Type === "AWS::DynamoDB::Table") {
       // CloudControl API doesn't support AWS::DynamoDB::Table
-      // so as a quick hack, we map it to AWS::DynamoDB::GlobalTable which does.
+      // so as a quick hack, we map it to AWS::DynamoDB::GlobalTable which is supported.
       resource.Type = "AWS::DynamoDB::GlobalTable";
       resource.Properties.Replicas = [
         {
@@ -193,20 +225,6 @@ export class Stack {
   }
 
   /**
-   * Get the {@link Parameter} definition by its {@link parameterName}.
-   *
-   * @param state current {@link UpdateState} being evaluated.
-   * @param parameterName name of the parameter to lookup.
-   * @returns the value of the {@link Parameter} if it exists, otherwise `undefined`.
-   */
-  private getParameterDefinition(
-    state: UpdateState,
-    parameterName: string
-  ): Parameter | undefined {
-    return state.template.Parameters?.[parameterName];
-  }
-
-  /**
    * Delete all resources in this Stack.
    */
   public async deleteStack(): Promise<void> {
@@ -215,33 +233,61 @@ export class Stack {
         `Cannot delete stack '${this.stackName}' since it does not exist.`
       );
     }
-    const dependencyGraph = buildDependencyGraph(this.state!.template);
-    const deleteState: UpdateState = {
-      template: this.state.template,
-      dependencyGraph,
+    const state: UpdateState = {
+      previousState: this.state.template,
+      previousDependencyGraph: buildDependencyGraph(this.state.template),
+      desiredState: undefined,
+      desiredDependencyGraph: undefined,
       tasks: {}, // initialize with empty state
     };
-    await Promise.all(
-      Object.keys(this.state.resources).map(async (logicalId) => {
-        deleteState.tasks[logicalId] = this.deleteResource(
-          logicalId,
-          deleteState
-        );
-      })
-    );
+
+    // delete all resources in the stack
+    await this.deleteResources(Object.keys(this.state.resources), state);
+
+    // set the state to `undefined` - this stack is goneskies
     this.state = undefined;
   }
 
+  /**
+   * Delete the Resources identified by {@link logicalIds} in order of their dependencies.
+   *
+   * @param logicalIds list of logicalIds to delete
+   * @param state {@link UpdateState} for this Stack Update operation.
+   */
+  private async deleteResources(logicalIds: string[], state: UpdateState) {
+    const allowedLogicalIds = new Set(logicalIds);
+    return await Promise.all(
+      logicalIds.map(async (logicalId) => {
+        state.tasks[logicalId] = this.deleteResource(
+          logicalId,
+          state,
+          allowedLogicalIds
+        );
+      })
+    );
+  }
+
+  /**
+   * Delete a Resource from AWS. Recursively delete its dependencies if there are any.
+   *
+   * @param logicalId Logical ID of the {@link PhysicalResource} to delete.
+   * @param state {@link UpdateState} for this Stack Update operation.
+   * @param allowedLogicalIds a set of logicalIds that are allowed to be deleted. This is so that we
+   *                          can delete a sub-set of the logicalIds when transiting dependencies,
+   *                          for example when deleting orphaned resources during a Stack Update.
+   * @returns the {@link PhysicalResource} that was deleted, or `undefined` if there was no Resource.
+   */
   private async deleteResource(
     logicalId: string,
-    state: UpdateState
-  ): Promise<PhysicalResource> {
+    state: UpdateState,
+    allowedLogicalIds: Set<String>
+  ): Promise<PhysicalResource | undefined> {
     if (logicalId in state.tasks) {
       return state.tasks[logicalId];
     }
 
     const physicalResource = this.getPhysicalResource(logicalId);
-    const logicalResource = this.getLogicalResource(state, logicalId);
+    const logicalResource = this.getLogicalResource(logicalId, state);
 
     if (physicalResource === undefined || logicalResource === undefined) {
       // TODO: should we error here or continue optimistically?
@@ -265,33 +311,47 @@ export class Stack {
       deletionPolicy === undefined ||
       deletionPolicy === DeletionPolicy.Delete
     ) {
-      const dependencies = state.dependencyGraph[logicalId];
-      // wait for dependencies to delete before deleting this resource
-      await Promise.all(
-        dependencies.map((dependency) => this.deleteResource(dependency, state))
-      );
+      const dependencies = state.previousDependencyGraph?.[logicalId];
 
-      const progress = (
-        await this.controlClient.send(
-          new control.DeleteResourceCommand({
-            TypeName: physicalResource.Type,
-            Identifier: physicalResource.PhysicalId,
-          })
-        )
-      ).ProgressEvent;
-
-      if (progress === undefined) {
-        throw new Error(
-          `DeleteResourceCommand returned an unefined ProgressEvent`
-        );
+      if (dependencies === undefined) {
+        throw new Error(`undefined dependencies`);
       }
 
-      return this.waitForProgress(
-        logicalId,
-        physicalResource.Type,
-        physicalResource.InputProperties,
-        progress
+      // wait for dependencies to delete before deleting this resource
+      await Promise.all(
+        dependencies.map((dependency) =>
+          this.deleteResource(dependency, state, allowedLogicalIds)
+        )
       );
+
+      if (allowedLogicalIds?.has(logicalId) ?? true) {
+        // if this logicalId is allowed to be deleted, then delete it
+        // nite: we always transit dependencies BEFORE any other action is taken
+        const progress = (
+          await this.controlClient.send(
+            new control.DeleteResourceCommand({
+              TypeName: physicalResource.Type,
+              Identifier: physicalResource.PhysicalId,
+            })
+          )
+        ).ProgressEvent;
+
+        if (progress === undefined) {
+          throw new Error(
+            `DeleteResourceCommand returned an unefined ProgressEvent`
+          );
+        }
+
+        return this.waitForProgress(
+          logicalId,
+          physicalResource.Type,
+          physicalResource.InputProperties,
+          progress
+        );
+      } else {
+        // we're not allowed to delete it, so skip
+        return physicalResource;
+      }
     } else if (deletionPolicy === DeletionPolicy.Retain) {
       return physicalResource;
     } else {
@@ -303,30 +363,70 @@ export class Stack {
   /**
    * Deploy all {@link LogicalResource}s in this {@link CloudFormationStack}
    *
+   * @param desiredState a {@link CloudFormationTemplate} describing the Desired State of this {@link Stack}.
+   * @param parameterValues input values of the {@link Parameters}.
    * @returns the new {@link StackState}.
    */
   public async updateStack(
-    template: CloudFormationTemplate,
+    desiredState: CloudFormationTemplate,
     parameterValues?: ParameterValues
   ): Promise<StackState> {
-    validateParameters(template, parameterValues);
+    const previousState = this.state?.template;
 
-    const updateState: UpdateState = {
-      template,
-      dependencyGraph: buildDependencyGraph(template),
+    const state: UpdateState = {
+      previousState: this.state?.template,
+      previousDependencyGraph: this.state?.template
+        ? buildDependencyGraph(this.state.template)
+        : undefined,
+      desiredState: desiredState,
+      desiredDependencyGraph: buildDependencyGraph(desiredState),
       parameterValues,
       tasks: {},
     };
-    return (this.state = {
-      template,
-      resources: (
-        await Promise.all(
-          Object.keys(template.Resources).map(async (logicalId) => ({
-            [logicalId]: await this.updateResource(updateState, logicalId),
-          }))
+
+    await this.validateParameters(desiredState, parameterValues);
+    if (desiredState.Rules) {
+      await this.validateRules(desiredState.Rules, state);
+    }
+
+    // create new resources
+    this.state = {
+      template: desiredState,
+      resources: {
+        ...(this.state?.resources ?? {}),
+        ...(
+          await Promise.all(
+            Object.keys(desiredState.Resources).map(async (logicalId) => {
+              const resource = await this.updateResource(state, logicalId);
+              return resource
+                ? {
+                    [logicalId]: resource,
+                  }
+                : undefined;
+            })
+          )
         )
-      ).reduce((a, b) => ({ ...a, ...b }), {}),
-    });
+          .filter(<T>(a: T): a is Exclude<T, undefined> => a !== undefined)
+          .reduce((a, b) => ({ ...a, ...b }), {}),
+      },
+    };
+
+    // clear tasks
+    state.tasks = {};
+
+    // delete orhpanned resources
+    const orhpannedLogicalIds =
+      previousState === undefined
+        ? []
+        : discoverOrphanedDependencies(previousState, desiredState);
+
+    await this.deleteResources(orhpannedLogicalIds, state);
+
+    for (const orphanedLogicalId of orhpannedLogicalIds) {
+      delete this.state?.resources[orphanedLogicalId];
+    }
+
+    return this.state;
   }
 
   /**
@@ -343,18 +443,35 @@ export class Stack {
   private async updateResource(
     state: UpdateState,
     logicalId: string
-  ): Promise<PhysicalResource> {
-    const logicalResource = this.getLogicalResource(state, logicalId);
+  ): Promise<PhysicalResource | undefined> {
+    const logicalResource = this.getLogicalResource(logicalId, state);
     if (logicalId in state.tasks) {
       return state.tasks[logicalId];
     } else {
       return (state.tasks[logicalId] = (async () => {
+        if (logicalResource.Condition) {
+          const conditionRule =
+            state.desiredState?.Conditions?.[logicalResource.Condition];
+          if (conditionRule === undefined) {
+            throw new Error(
+              `Condition '${logicalResource.Condition}' does not exist`
+            );
+          }
+          const shouldCreate = await this.evaluateRuleExpressionToBoolean(
+            conditionRule,
+            state
+          );
+          if (!shouldCreate) {
+            return undefined;
+          }
+        }
+
         const properties = (
           await Promise.all(
             Object.entries(logicalResource.Properties).map(
               async ([propName, propExpr]) => {
                 return {
-                  [propName]: await this.evaluateExpr(state, propExpr),
+                  [propName]: await this.evaluateExpr(propExpr, state),
                 };
               }
             )
@@ -364,6 +481,7 @@ export class Stack {
         const physicalResource = this.getPhysicalResource(logicalId);
         let controlApiResult;
         if (physicalResource === undefined) {
+          console.log(`Creating ${logicalId} (${logicalResource.Type})`);
           controlApiResult = await this.controlClient.send(
             new control.CreateResourceCommand({
               TypeName: logicalResource.Type,
@@ -373,8 +491,12 @@ export class Stack {
         } else {
           const patch = compare(physicalResource.InputProperties, properties);
           if (patch.length === 0) {
+            console.log(
+              `Skipping Update of ${logicalId} (${logicalResource.Type})`
+            );
             return physicalResource;
           }
+          console.log(`Updating ${logicalId} (${logicalResource.Type})`);
           controlApiResult = await this.controlClient.send(
             new control.UpdateResourceCommand({
               TypeName: logicalResource.Type,
@@ -408,11 +530,9 @@ export class Stack {
     progress: control.ProgressEvent
   ): Promise<PhysicalResource> {
     do {
-      console.log(
-        `${progress.OperationStatus} ${logicalId} ${progress.StatusMessage}`
-      );
       const opStatus = progress?.OperationStatus;
       if (opStatus === "SUCCESS") {
+        console.log(`${progress.Operation} Success: ${logicalId} (${type})`);
         const attributes =
           progress.Operation === "DELETE"
             ? undefined
@@ -432,9 +552,13 @@ export class Stack {
           Attributes: attributes ? JSON.parse(attributes) : {},
         };
       } else if (opStatus === "FAILED") {
-        throw new Error(
-          progress?.StatusMessage ?? `failed to deploy resource: '${logicalId}'`
-        );
+        const errorMessage = `Failed to ${
+          progress.Operation ?? "Update"
+        } ${logicalId} (${type})${
+          progress.StatusMessage ? ` ${progress.StatusMessage}` : ""
+        }`;
+        console.log(errorMessage);
+        throw new Error(errorMessage);
       }
 
       try {
@@ -465,29 +589,33 @@ export class Stack {
    * This property may come from evaluating an intrinsic function or by fetching
    * an attribute from a physically deployed resource.
    *
-   * @param state the {@link UpdateState} being evaluated
    * @param expr expression to evaluate
+   * @param state the {@link UpdateState} being evaluated
    * @returns the physical property as a primitive JSON object
    */
   private async evaluateExpr(
-    state: UpdateState,
-    expr: Expression
-  ): Promise<EvaluatedExpression> {
+    expr: Expression,
+    state: UpdateState
+  ): Promise<Value> {
     if (expr === undefined || expr === null) {
       return expr;
     } else if (isIntrinsicFunction(expr)) {
       return this.evaluateIntrinsicFunction(state, expr);
-    } else if (typeof expr === "string" && expr.startsWith("!Ref ")) {
-      return this.evaluateIntrinsicFunction(state, {
-        Ref: expr.substring("!Ref ".length),
-      });
+    } else if (typeof expr === "string") {
+      if (isRefString(expr)) {
+        return this.evaluateIntrinsicFunction(state, parseRefString(expr));
+      } else if (isPseudoParameter(expr)) {
+        return this.evaluatePseudoParameter(expr);
+      } else {
+        return expr;
+      }
     } else if (Array.isArray(expr)) {
-      return Promise.all(expr.map((e) => this.evaluateExpr(state, e)));
+      return Promise.all(expr.map((e) => this.evaluateExpr(e, state)));
     } else if (typeof expr === "object") {
       return (
         await Promise.all(
           Object.entries(expr).map(async ([k, v]) => ({
-            [k]: await this.evaluateExpr(state, v),
+            [k]: await this.evaluateExpr(v, state),
           }))
         )
       ).reduce((a, b) => ({ ...a, ...b }), {});
@@ -505,17 +633,25 @@ export class Stack {
   private async evaluateIntrinsicFunction(
     state: UpdateState,
     expr: IntrinsicFunction
-  ): Promise<EvaluatedExpression> {
+  ): Promise<Value> {
+    const parameters = state.desiredState?.Parameters ?? {};
+    const parameterValues = state.parameterValues ?? {};
+
     if (isRef(expr)) {
-      const paramDef = this.getParameterDefinition(state, expr.Ref);
+      const paramDef = parameters[expr.Ref];
       if (paramDef !== undefined) {
         return this.evaluateParameter(state, expr.Ref, paramDef);
       } else {
-        return (await this.updateResource(state, expr.Ref)).PhysicalId;
+        return (await this.updateResource(state, expr.Ref))?.PhysicalId;
       }
     } else if (isFnGetAtt(expr)) {
       const [logicalId, attributeName] = expr["Fn::GetAtt"];
       const resource = await this.updateResource(state, logicalId);
+      if (resource === undefined) {
+        throw new Error(
+          `Resource '${logicalId}' does not exist, perhaps a Condition is preventing it from being created?`
+        );
+      }
       const attributeValue = resource.Attributes[attributeName];
       if (attributeValue === undefined) {
         throw new Error(
@@ -527,13 +663,13 @@ export class Stack {
       const [delimiter, values] = expr["Fn::Join"];
       return (
         await Promise.all(
-          values.map((value) => this.evaluateExpr(state, value))
+          values.map((value) => this.evaluateExpr(value, state))
         )
       ).join(delimiter);
     } else if (isFnSelect(expr)) {
       const [index, listOfObjects] = expr["Fn::Select"];
       if (index in listOfObjects) {
-        return this.evaluateExpr(state, listOfObjects[index]);
+        return this.evaluateExpr(listOfObjects[index], state);
       } else {
         throw new Error(
           `index ${index} out of bounds in list: ${listOfObjects}`
@@ -541,7 +677,7 @@ export class Stack {
       }
     } else if (isFnSplit(expr)) {
       const [delimiter, sourceStringExpr] = expr["Fn::Split"];
-      const sourceString = await this.evaluateExpr(state, sourceStringExpr);
+      const sourceString = await this.evaluateExpr(sourceStringExpr, state);
       if (typeof sourceString !== "string") {
         throw new Error(
           `Fn::Split must operate on a String, but received: ${typeof sourceString}`
@@ -553,7 +689,7 @@ export class Stack {
       let result = string;
       await Promise.all(
         Object.entries(variables).map(async ([varName, varVal]) => {
-          const resolvedVal = await this.evaluateExpr(state, varVal);
+          const resolvedVal = await this.evaluateExpr(varVal, state);
           if (
             typeof resolvedVal === "string" ||
             typeof resolvedVal === "number" ||
@@ -569,7 +705,7 @@ export class Stack {
       );
       return result;
     } else if (isFnBase64(expr)) {
-      const exprVal = await this.evaluateExpr(state, expr["Fn::Base64"]);
+      const exprVal = await this.evaluateExpr(expr["Fn::Base64"], state);
       if (typeof exprVal === "string") {
         return Buffer.from(exprVal, "utf8").toString("base64");
       } else {
@@ -582,8 +718,8 @@ export class Stack {
         expr["Fn::FindInMap"];
 
       const [topLevelKey, secondLevelKey] = await Promise.all([
-        this.evaluateExpr(state, topLevelKeyExpr),
-        this.evaluateExpr(state, secondLevelKeyExpr),
+        this.evaluateExpr(topLevelKeyExpr, state),
+        this.evaluateExpr(secondLevelKeyExpr, state),
       ]);
       if (typeof topLevelKey !== "string") {
         throw new Error(
@@ -596,18 +732,154 @@ export class Stack {
         );
       }
       const value =
-        state.template.Mappings?.[mapName]?.[topLevelKey]?.[secondLevelKey];
+        state.desiredState?.Mappings?.[mapName]?.[topLevelKey]?.[
+          secondLevelKey
+        ];
       if (value === undefined) {
         throw new Error(
           `Could not find map value: ${mapName}.${topLevelKey}.${secondLevelKey}`
         );
       }
       return value;
+    } else if (isFnRefAll(expr)) {
+      return Object.entries(parameters)
+        .map(([paramName, paramDef]) =>
+          paramDef.Type === expr["Fn::RefAll"]
+            ? parameterValues[paramName]
+            : undefined
+        )
+        .filter((paramVal) => paramVal !== undefined);
+    } else if (isFnEquals(expr)) {
+      const [left, right] = await Promise.all(
+        expr["Fn::Equals"].map((expr) => this.evaluateExpr(expr, state))
+      );
+      return isDeepEqual(left, right);
+    } else if (isFnNot(expr)) {
+      const [condition] = await Promise.all(
+        expr["Fn::Not"].map((expr) => this.evaluateExpr(expr, state))
+      );
+      if (typeof condition === "boolean") {
+        return !condition;
+      } else {
+        throw new Error(
+          `Malformed input to Fn::Not - expected a boolean but received ${typeof condition}`
+        );
+      }
+    } else if (isFnAnd(expr)) {
+      if (expr["Fn::And"].length === 0) {
+        throw new Error(
+          `Malformed input to Fn::And - your must provide at least one [{condition}].`
+        );
+      }
+      return (
+        await Promise.all(
+          expr["Fn::And"].map((expr) => this.evaluateExpr(expr, state))
+        )
+      ).reduce((a, b) => {
+        if (typeof b !== "boolean") {
+          throw new Error(
+            `Malformed input to Fn::And - expected a boolean but received ${typeof b}`
+          );
+        }
+        return a && b;
+      }, true);
+    } else if (isFnOr(expr)) {
+      if (expr["Fn::Or"].length === 0) {
+        throw new Error(
+          `Malformed input to Fn::Or - your must provide at least one [{condition}].`
+        );
+      }
+      return (
+        await Promise.all(
+          expr["Fn::Or"].map((expr) => this.evaluateExpr(expr, state))
+        )
+      ).reduce((a, b) => {
+        if (typeof b !== "boolean") {
+          throw new Error(
+            `Malformed input to Fn::Or - expected a boolean but received ${typeof b}`
+          );
+        }
+        return a || b;
+      }, false);
+    } else if (isFnContains(expr)) {
+      const [listOfStrings, string] = await Promise.all(
+        expr["Fn::Contains"].map((expr) => this.evaluateExpr(expr, state))
+      );
+
+      assertIsListOfStrings(listOfStrings, "listOfStrings");
+      assertIsString(string, "string");
+
+      return listOfStrings.includes(string);
+    } else if (isFnEachMemberEquals(expr)) {
+      const [listOfStrings, string] = await Promise.all(
+        expr["Fn::EachMemberEquals"].map((expr) =>
+          this.evaluateExpr(expr, state)
+        )
+      );
+
+      assertIsListOfStrings(listOfStrings, "listOfStrings");
+      assertIsString(string, "string");
+
+      return listOfStrings.find((s) => s !== string) === undefined;
+    } else if (isFnEachMemberIn(expr)) {
+      const [stringsToCheck, stringsToMatch] = await Promise.all(
+        expr["Fn::EachMemberIn"].map((expr) => this.evaluateExpr(expr, state))
+      );
+
+      assertIsListOfStrings(stringsToCheck, "stringsToCheck");
+      assertIsListOfStrings(stringsToMatch, "stringsToMatch");
+
+      return stringsToCheck.find(
+        (check) => stringsToMatch.find((match) => check === match) !== undefined
+      );
+    } else if (isFnValueOf(expr)) {
+      throw new Error("Fn::ValueOf is not yet supported");
+    } else if (isFnValueOfAll(expr)) {
+      throw new Error("Fn::ValueOfAll is not yet supported");
+    } else if (isFnIf(expr)) {
+      const [whenExpr, thenExpr, elseExpr] = expr["Fn::If"];
+
+      const when = await this.evaluateExpr(whenExpr, state);
+      if (when === true) {
+        return await this.evaluateExpr(thenExpr, state);
+      } else if (when === false) {
+        return await this.evaluateExpr(elseExpr, state);
+      } else {
+        throw new Error(`invalid value for 'condition' in Fn:If: ${whenExpr}`);
+      }
     }
 
     throw new Error(
       `expression not implemented: ${Object.keys(expr).join(",")}`
     );
+  }
+
+  /**
+   * Evaluate a {@link PseudoParameter} and return its value.
+   *
+   * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/pseudo-parameter-reference.html
+   */
+  private evaluatePseudoParameter(expr: PseudoParameter) {
+    if (expr === "AWS::AccountId") {
+      return this.account;
+    } else if (expr === "AWS::NoValue") {
+      return null;
+    } else if (expr === "AWS::Region") {
+      return this.region;
+    } else if (expr === "AWS::Partition") {
+      // gov regions are not supported
+      return "aws";
+    } else if (expr === "AWS::NotificationARNs") {
+      // don't yet support sending notifications to SNS
+      // on top of supporting this, we could also provide native JS hooks into the engine
+      return [];
+    } else if (expr === "AWS::StackId") {
+      return this.stackName;
+    } else if (expr === "AWS::StackName") {
+      return this.stackName;
+    } else {
+      throw new Error(`unsupported Pseudo Parameter '${expr}'`);
+    }
   }
 
   /**
@@ -628,7 +900,7 @@ export class Stack {
     state: UpdateState,
     paramName: string,
     paramDef: Parameter
-  ): Promise<EvaluatedExpression> {
+  ): Promise<Value> {
     let paramVal = state.parameterValues?.[paramName];
     if (paramVal === undefined) {
       if (paramDef.Default !== undefined) {
@@ -696,5 +968,157 @@ export class Stack {
     }
 
     return paramVal;
+  }
+
+  /**
+   * Validate the {@link parameterValues} against the {@link Parameter} defintiions in the {@link template}.
+   *
+   * @param template the {@link CloudFormationTemplate}
+   * @param parameterValues input {@link ParameterValues}.
+   */
+  private async validateParameters(
+    template: CloudFormationTemplate,
+    parameterValues: ParameterValues | undefined
+  ) {
+    if (template.Parameters === undefined) {
+      if (
+        parameterValues !== undefined &&
+        Object.keys(parameterValues).length > 0
+      ) {
+        throw new Error(
+          `the template accepts no Parameters, but Parameters were passed to the Template`
+        );
+      }
+    } else {
+      for (const [paramName, paramDef] of Object.entries(template.Parameters)) {
+        const paramVal = parameterValues?.[paramName];
+
+        validateParameter(paramName, paramDef, paramVal);
+      }
+    }
+  }
+
+  /**
+   * Validate the {@link Rules} section of a {@link CloudFormationTemplate}.
+   *
+   * For each {@link Rule}, validate that the {@link parameterValues} comply with the {@link Assertions}.
+   *
+   * @param rules the {@link Rules} section of a {@link CloudFormationTemplate}.
+   * @param state the {@link UpdateState} of the current evaluation.
+   */
+  private async validateRules(rules: Rules, state: UpdateState) {
+    const errors = (
+      await Promise.all(
+        Object.entries(rules).map(async ([ruleId, rule]) =>
+          (
+            await this.evaluateRule(rule, state)
+          ).map(
+            (errorMessage) =>
+              `Rule '${ruleId}' failed vaidation: ${errorMessage}`
+          )
+        )
+      )
+    ).reduce((a, b) => a.concat(b), []);
+
+    if (errors.length > 0) {
+      throw new Error(errors.join("\n"));
+    }
+  }
+
+  /**
+   * Evaluates a {@link Rule} and returns an array of {@link Assertion} errors.
+   *
+   * @param rule the {@link Rule} to evaluate.
+   * @param state the {@link UpdateState} of the current evaluation.
+   * @returns an array of {@link Assertion} errors.
+   */
+  private async evaluateRule(
+    rule: Rule,
+    state: UpdateState
+  ): Promise<string[]> {
+    if (
+      rule.RuleCondition === undefined ||
+      (await this.evaluateRuleExpressionToBoolean(rule.RuleCondition, state))
+    ) {
+      return (
+        await Promise.all(
+          rule.Assertions.map(async (assertion) => {
+            const error = await this.evaluateAssertion(assertion, state);
+            return error ? [error] : [];
+          })
+        )
+      ).reduce((a, b) => a.concat(b), []);
+    } else {
+      return [];
+    }
+  }
+
+  /**
+   * Evalautes an {@link Assertion} against a {@link CloudFormationTemplate}'s {@link Parameters}.
+   *
+   * @param assertion the {@link Assertion} condition to evaluate.
+   * @param state the {@link UpdateState} of the current evaluation.
+   * @returns an array of {@link Assertion} errors.
+   */
+  private async evaluateAssertion(
+    assertion: Assertion,
+    state: UpdateState
+  ): Promise<string | undefined> {
+    if (
+      !(await this.evaluateRuleExpressionToBoolean(assertion.Assert, state))
+    ) {
+      return assertion.AssertDescription ?? JSON.stringify(assertion.Assert);
+    } else {
+      return undefined;
+    }
+  }
+
+  /**
+   * Evaluate a {@link RuleFunction} to a `boolean`.
+   *
+   * @param rule the {@link RuleFunction} to evaluate.
+   * @param state the {@link UpdateState} of the current evaluation.
+   * @returns the evaluated `boolean` value of the {@link rule}.
+   * @throws an Error if the {@link rule} does not evaluate to a `boolean`.
+   */
+  private async evaluateRuleExpressionToBoolean(
+    rule: RuleFunction,
+    state: UpdateState
+  ): Promise<boolean> {
+    const result = await this.evaluateExpr(rule, state);
+    if (typeof result === "boolean") {
+      return result;
+    } else {
+      throw new Error(
+        `rule must evaluate to a Boolean, but evalauted to ${typeof result}`
+      );
+    }
+  }
+}
+
+function assertIsString(
+  string: any,
+  argumentName: string
+): asserts string is string {
+  if (typeof string !== "string") {
+    throw new Error(
+      `The ${argumentName} must be a string, but was ${typeof string}`
+    );
+  }
+}
+
+function assertIsListOfStrings(
+  strings: any,
+  argumentName: string
+): asserts strings is string[] {
+  if (
+    !Array.isArray(strings) ||
+    strings.find((s) => typeof s !== "string") !== undefined
+  ) {
+    throw new Error(
+      `The ${argumentName} argument must be a list of strings, but was ${typeof strings}`
+    );
+  } else if (strings.length === 0) {
+    throw new Error(`The ${argumentName} cannot be empty.`);
   }
 }
