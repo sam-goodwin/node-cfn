@@ -97,11 +97,73 @@ export interface UpdateState {
    */
   parameterValues?: ParameterValues;
   /**
-   * Map of `logicalId` to a task ({@link Promise}) resolving the new state of the {@link PhysicalResource}.
+   * Map of `logicalId` to its {@link Task} in operation.s
    */
-  tasks: {
-    [logicalId: string]: Promise<PhysicalResource | undefined>;
-  };
+  tasks: Tasks;
+  /**
+   * A Promise to the {@link StackState} output by this Update.
+   */
+  execute(): Promise<StackState | undefined>;
+  /**
+   * Call this hook to cancel the {@link UpdateState}.
+   */
+  cancel(): Promise<StackState | undefined>;
+}
+
+export interface Tasks {
+  [logicalId: string]: Task;
+}
+
+export interface Task {
+  resource: Promise<PhysicalResource | undefined>;
+  cancellationToken: CancellationToken;
+}
+
+class CancellationToken {
+  private resolve: ((value: any) => any) | undefined;
+
+  // @ts-ignore - not sure whether we need to support throwing an error in the cancel promise
+  private reject: ((err: any) => any) | undefined;
+
+  private readonly promise: Promise<undefined>;
+
+  public isCancelled: boolean = false;
+
+  constructor() {
+    this.promise = new Promise((resolve, reject) => {
+      this.resolve = resolve;
+      this.reject = reject;
+      return undefined;
+    });
+  }
+
+  /**
+   * Wait until the {@link Task} associated with this {@link CancellationToken} is Cancelled.
+   */
+  public waitUntilCancelled() {
+    return this.promise;
+  }
+
+  /**
+   * Begin the process of cancelling this {@link CancellationToken}.
+   */
+  public cancel() {
+    this.isCancelled = true;
+  }
+
+  /**
+   * The {@link Task} calls this function to report when it has stopped execution.
+   */
+  public cancelled() {
+    if (this.isCancelled) {
+      if (this.resolve === undefined) {
+        // should be impossible
+        throw new Error(`isCancelled is true but resolve is undefined`);
+      }
+      this.resolve(undefined);
+    }
+    return undefined;
+  }
 }
 
 export interface StackProps {
@@ -163,13 +225,13 @@ export class Stack {
   /**
    * Current {@link StackState} of the {@link Stack}.
    */
-  private state: StackState | undefined;
+  private currentState: StackState | undefined;
 
   constructor(props: StackProps) {
     this.account = props.account;
     this.region = props.region;
     this.stackName = props.stackName;
-    this.state = props.previousState;
+    this.currentState = props.previousState;
     this.controlClient =
       props.controlClient ??
       new control.CloudControlClient({
@@ -186,7 +248,7 @@ export class Stack {
    * @returns the current {@link StackState}.
    */
   public getState() {
-    return this.state;
+    return this.currentState;
   }
 
   /**
@@ -195,7 +257,7 @@ export class Stack {
    * @returns the {@link PhysicalResource} if it exists, otherwise `undefined`.
    */
   private getPhysicalResource(logicalId: string): PhysicalResource | undefined {
-    return this.state?.resources[logicalId];
+    return this.currentState?.resources[logicalId];
   }
 
   /**
@@ -228,25 +290,36 @@ export class Stack {
   /**
    * Delete all resources in this Stack.
    */
-  public async deleteStack(): Promise<void> {
-    if (this.state === undefined) {
+  public deleteStack(): UpdateState {
+    if (this.currentState === undefined) {
       throw new Error(
         `Cannot delete stack '${this.stackName}' since it does not exist.`
       );
     }
+    const tasks: Tasks = {};
+
     const state: UpdateState = {
-      previousState: this.state.template,
-      previousDependencyGraph: buildDependencyGraph(this.state.template),
+      previousState: this.currentState.template,
+      previousDependencyGraph: buildDependencyGraph(this.currentState.template),
       desiredState: undefined,
       desiredDependencyGraph: undefined,
-      tasks: {}, // initialize with empty state
+      tasks,
+      execute: async () => {
+        // delete all resources in the stack
+        await this.deleteResources(
+          Object.keys(this.currentState!.resources),
+          state
+        );
+
+        // set the state to `undefined` - this stack is goneskies
+        return (this.currentState = undefined);
+      },
+      cancel: async () => {
+        return null as any;
+      },
     };
 
-    // delete all resources in the stack
-    await this.deleteResources(Object.keys(this.state.resources), state);
-
-    // set the state to `undefined` - this stack is goneskies
-    this.state = undefined;
+    return state;
   }
 
   /**
@@ -278,87 +351,95 @@ export class Stack {
    *                          for example when deleting orphaned resources during a Stack Update.
    * @returns the {@link PhysicalResource} that was deleted, or `undefined` if there was no Resource.
    */
-  private async deleteResource(
+  private deleteResource(
     logicalId: string,
     state: UpdateState,
     allowedLogicalIds: Set<String>
-  ): Promise<PhysicalResource | undefined> {
+  ): Task {
     if (logicalId in state.tasks) {
       return state.tasks[logicalId];
     }
+    const cancellationToken = new CancellationToken();
 
-    const physicalResource = this.getPhysicalResource(logicalId);
-    const logicalResource = this.getLogicalResource(logicalId, state);
+    return {
+      cancellationToken,
+      resource: (async () => {
+        const physicalResource = this.getPhysicalResource(logicalId);
+        const logicalResource = this.getLogicalResource(logicalId, state);
 
-    if (physicalResource === undefined || logicalResource === undefined) {
-      // TODO: should we error here or continue optimistically?
-      throw new Error(`Resource does not exist: '${logicalId}'`);
-    }
-
-    const deletionPolicy = logicalResource.DeletionPolicy;
-    if (
-      deletionPolicy === DeletionPolicy.Snapshot ||
-      (deletionPolicy === undefined &&
-        (physicalResource.Type === "AWS::RDS::DBCluster" ||
-          (physicalResource.Type === "AWS::RDS::DBInstance" &&
-            logicalResource.Properties.DBClusterIdentifier === undefined)))
-    ) {
-      // RDS defaults to Snapshot in certain conditions, so we detect them and error here
-      // since we don't yet support DeletionPolicy.Snapshot
-      throw new Error(`DeletionPolicy.Snapshot is not yet supported`);
-    }
-
-    if (
-      deletionPolicy === undefined ||
-      deletionPolicy === DeletionPolicy.Delete
-    ) {
-      const dependencies = state.previousDependencyGraph?.[logicalId];
-
-      if (dependencies === undefined) {
-        throw new Error(`undefined dependencies`);
-      }
-
-      // wait for dependencies to delete before deleting this resource
-      await Promise.all(
-        dependencies.map((dependency) =>
-          this.deleteResource(dependency, state, allowedLogicalIds)
-        )
-      );
-
-      if (allowedLogicalIds?.has(logicalId) ?? true) {
-        // if this logicalId is allowed to be deleted, then delete it
-        // nite: we always transit dependencies BEFORE any other action is taken
-        const progress = (
-          await this.controlClient.send(
-            new control.DeleteResourceCommand({
-              TypeName: physicalResource.Type,
-              Identifier: physicalResource.PhysicalId,
-            })
-          )
-        ).ProgressEvent;
-
-        if (progress === undefined) {
-          throw new Error(
-            `DeleteResourceCommand returned an unefined ProgressEvent`
-          );
+        if (physicalResource === undefined || logicalResource === undefined) {
+          // TODO: should we error here or continue optimistically?
+          throw new Error(`Resource does not exist: '${logicalId}'`);
         }
 
-        return this.waitForProgress(
-          logicalId,
-          physicalResource.Type,
-          physicalResource.InputProperties,
-          progress
-        );
-      } else {
-        // we're not allowed to delete it, so skip
-        return physicalResource;
-      }
-    } else if (deletionPolicy === DeletionPolicy.Retain) {
-      return physicalResource;
-    } else {
-      // should never reach here
-      throw new Error(`Unsupported: DeletionPolicy.${deletionPolicy}`);
-    }
+        const deletionPolicy = logicalResource.DeletionPolicy;
+        if (
+          deletionPolicy === DeletionPolicy.Snapshot ||
+          (deletionPolicy === undefined &&
+            (physicalResource.Type === "AWS::RDS::DBCluster" ||
+              (physicalResource.Type === "AWS::RDS::DBInstance" &&
+                logicalResource.Properties.DBClusterIdentifier === undefined)))
+        ) {
+          // RDS defaults to Snapshot in certain conditions, so we detect them and error here
+          // since we don't yet support DeletionPolicy.Snapshot
+          throw new Error(`DeletionPolicy.Snapshot is not yet supported`);
+        }
+
+        if (
+          deletionPolicy === undefined ||
+          deletionPolicy === DeletionPolicy.Delete
+        ) {
+          const dependencies = state.previousDependencyGraph?.[logicalId];
+
+          if (dependencies === undefined) {
+            throw new Error(`undefined dependencies`);
+          }
+
+          // wait for dependencies to delete before deleting this resource
+          await Promise.all(
+            dependencies.map(
+              (dependency) =>
+                this.deleteResource(dependency, state, allowedLogicalIds)
+                  .resource
+            )
+          );
+
+          if (allowedLogicalIds?.has(logicalId) ?? true) {
+            // if this logicalId is allowed to be deleted, then delete it
+            // nite: we always transit dependencies BEFORE any other action is taken
+            const progress = (
+              await this.controlClient.send(
+                new control.DeleteResourceCommand({
+                  TypeName: physicalResource.Type,
+                  Identifier: physicalResource.PhysicalId,
+                })
+              )
+            ).ProgressEvent;
+
+            if (progress === undefined) {
+              throw new Error(
+                `DeleteResourceCommand returned an unefined ProgressEvent`
+              );
+            }
+
+            return this.waitForProgress(
+              logicalId,
+              physicalResource.Type,
+              physicalResource.InputProperties,
+              progress
+            );
+          } else {
+            // we're not allowed to delete it, so skip
+            return physicalResource;
+          }
+        } else if (deletionPolicy === DeletionPolicy.Retain) {
+          return physicalResource;
+        } else {
+          // should never reach here
+          throw new Error(`Unsupported: DeletionPolicy.${deletionPolicy}`);
+        }
+      })(),
+    };
   }
 
   /**
@@ -366,68 +447,91 @@ export class Stack {
    *
    * @param desiredState a {@link CloudFormationTemplate} describing the Desired State of this {@link Stack}.
    * @param parameterValues input values of the {@link Parameters}.
-   * @returns the new {@link StackState}.
+   * @returns the {@link UpdateState} request.
    */
-  public async updateStack(
+  public updateStack(
     desiredState: CloudFormationTemplate,
     parameterValues?: ParameterValues
-  ): Promise<StackState> {
-    const previousState = this.state?.template;
+  ): UpdateState {
+    const previousState = this.currentState?.template;
+
+    const tasks: Tasks = {};
 
     const state: UpdateState = {
-      previousState: this.state?.template,
-      previousDependencyGraph: this.state?.template
-        ? buildDependencyGraph(this.state.template)
+      previousState: this.currentState?.template,
+      previousDependencyGraph: this.currentState?.template
+        ? buildDependencyGraph(this.currentState.template)
         : undefined,
       desiredState: desiredState,
       desiredDependencyGraph: buildDependencyGraph(desiredState),
       parameterValues,
-      tasks: {},
-    };
+      tasks,
+      cancel: async () => {
+        for (const task of Object.values(tasks)) {
+          // trigger the task to cancel
+          task.cancellationToken.cancel();
+        }
 
-    await this.validateParameters(desiredState, parameterValues);
-    if (desiredState.Rules) {
-      await this.validateRules(desiredState.Rules, state);
-    }
-
-    // create new resources
-    this.state = {
-      template: desiredState,
-      resources: {
-        ...(this.state?.resources ?? {}),
-        ...(
-          await Promise.all(
-            Object.keys(desiredState.Resources).map(async (logicalId) => {
-              const resource = await this.updateResource(state, logicalId);
-              return resource
-                ? {
-                    [logicalId]: resource,
-                  }
-                : undefined;
-            })
+        // wait for tasks to stop executing
+        await Promise.all(
+          Object.values(tasks).map((task) =>
+            task.cancellationToken.waitUntilCancelled()
           )
-        )
-          .filter(<T>(a: T): a is Exclude<T, undefined> => a !== undefined)
-          .reduce((a, b) => ({ ...a, ...b }), {}),
+        );
+
+        // TODO: initiate rollback
+
+        return this.currentState;
+      },
+      execute: async () => {
+        await this.validateParameters(desiredState, parameterValues);
+        if (desiredState.Rules) {
+          await this.validateRules(desiredState.Rules, state);
+        }
+
+        // create new resources
+        this.currentState = {
+          template: desiredState,
+          resources: {
+            ...(this.currentState?.resources ?? {}),
+            ...(
+              await Promise.all(
+                Object.keys(desiredState.Resources).map(async (logicalId) => {
+                  const resource = await this.updateResource(state, logicalId)
+                    .resource;
+                  return resource
+                    ? {
+                        [logicalId]: resource,
+                      }
+                    : undefined;
+                })
+              )
+            )
+              .filter(<T>(a: T): a is Exclude<T, undefined> => a !== undefined)
+              .reduce((a, b) => ({ ...a, ...b }), {}),
+          },
+        };
+
+        // clear tasks
+        state.tasks = {};
+
+        // delete orhpanned resources
+        const orhpannedLogicalIds =
+          previousState === undefined
+            ? []
+            : discoverOrphanedDependencies(previousState, desiredState);
+
+        await this.deleteResources(orhpannedLogicalIds, state);
+
+        for (const orphanedLogicalId of orhpannedLogicalIds) {
+          delete this.currentState?.resources[orphanedLogicalId];
+        }
+
+        return this.currentState;
       },
     };
 
-    // clear tasks
-    state.tasks = {};
-
-    // delete orhpanned resources
-    const orhpannedLogicalIds =
-      previousState === undefined
-        ? []
-        : discoverOrphanedDependencies(previousState, desiredState);
-
-    await this.deleteResources(orhpannedLogicalIds, state);
-
-    for (const orphanedLogicalId of orhpannedLogicalIds) {
-      delete this.state?.resources[orphanedLogicalId];
-    }
-
-    return this.state;
+    return state;
   }
 
   /**
@@ -441,95 +545,115 @@ export class Stack {
    * @param logicalId Logical ID of the {@link LogicalResource} to deploy.
    * @returns data describing the {@link PhysicalResource}.
    */
-  private async updateResource(
-    state: UpdateState,
-    logicalId: string
-  ): Promise<PhysicalResource | undefined> {
+  private updateResource(state: UpdateState, logicalId: string): Task {
     const logicalResource = this.getLogicalResource(logicalId, state);
+
     if (logicalId in state.tasks) {
       return state.tasks[logicalId];
     } else {
-      return (state.tasks[logicalId] = (async () => {
-        if (logicalResource.Condition) {
-          const conditionRule =
-            state.desiredState?.Conditions?.[logicalResource.Condition];
-          if (conditionRule === undefined) {
-            throw new Error(
-              `Condition '${logicalResource.Condition}' does not exist`
-            );
-          }
-          const shouldCreate = await this.evaluateRuleExpressionToBoolean(
-            conditionRule,
-            state
-          );
-          if (!shouldCreate) {
-            return undefined;
-          }
-        }
+      const cancellationToken = new CancellationToken();
 
-        const properties = (
-          await Promise.all(
-            Object.entries(logicalResource.Properties).map(
-              async ([propName, propExpr]) => {
-                return {
-                  [propName]: await this.evaluateExpr(propExpr, state),
-                };
-              }
+      return (state.tasks[logicalId] = {
+        cancellationToken,
+        resource: (async () => {
+          if (logicalResource.Condition) {
+            const conditionRule =
+              state.desiredState?.Conditions?.[logicalResource.Condition];
+            if (conditionRule === undefined) {
+              throw new Error(
+                `Condition '${logicalResource.Condition}' does not exist`
+              );
+            }
+            const shouldCreate = await this.evaluateRuleExpressionToBoolean(
+              conditionRule,
+              state
+            );
+            if (!shouldCreate) {
+              return undefined;
+            }
+          }
+
+          const properties = (
+            await Promise.all(
+              Object.entries(logicalResource.Properties).map(
+                async ([propName, propExpr]) => {
+                  return {
+                    [propName]: await this.evaluateExpr(propExpr, state),
+                  };
+                }
+              )
             )
-          )
-        ).reduce((a, b) => ({ ...a, ...b }), {});
+          ).reduce((a, b) => ({ ...a, ...b }), {});
 
-        const physicalResource = this.getPhysicalResource(logicalId);
-        let controlApiResult;
-        if (physicalResource === undefined) {
-          console.log(`Creating ${logicalId} (${logicalResource.Type})`);
-          controlApiResult = await this.controlClient.send(
-            new control.CreateResourceCommand({
-              TypeName: logicalResource.Type,
-              DesiredState: JSON.stringify(properties),
-            })
-          );
-        } else {
-          const patch = compare(physicalResource.InputProperties, properties);
-          if (patch.length === 0) {
-            console.log(
-              `Skipping Update of ${logicalId} (${logicalResource.Type})`
-            );
-            return physicalResource;
+          if (cancellationToken.isCancelled) {
+            // check if we should cancel before intiitating CRUD on the resource.
+            return cancellationToken.cancelled();
           }
-          console.log(`Updating ${logicalId} (${logicalResource.Type})`);
-          controlApiResult = await this.controlClient.send(
-            new control.UpdateResourceCommand({
-              TypeName: logicalResource.Type,
-              PatchDocument: JSON.stringify(patch),
-              Identifier: physicalResource.PhysicalId,
-            })
-          );
-        }
-        const progress = controlApiResult.ProgressEvent;
 
-        if (progress === undefined) {
-          throw new Error(
-            `DeleteResourceCommand returned an unefined ProgressEvent`
-          );
-        }
+          const physicalResource = this.getPhysicalResource(logicalId);
+          let controlApiResult;
+          if (physicalResource === undefined) {
+            console.log(`Creating ${logicalId} (${logicalResource.Type})`);
+            controlApiResult = await this.controlClient.send(
+              new control.CreateResourceCommand({
+                TypeName: logicalResource.Type,
+                DesiredState: JSON.stringify(properties),
+              })
+            );
+          } else {
+            const patch = compare(physicalResource.InputProperties, properties);
+            if (patch.length === 0) {
+              console.log(
+                `Skipping Update of ${logicalId} (${logicalResource.Type})`
+              );
+              return physicalResource;
+            }
+            console.log(`Updating ${logicalId} (${logicalResource.Type})`);
+            controlApiResult = await this.controlClient.send(
+              new control.UpdateResourceCommand({
+                TypeName: logicalResource.Type,
+                PatchDocument: JSON.stringify(patch),
+                Identifier: physicalResource.PhysicalId,
+              })
+            );
+          }
+          const progress = controlApiResult.ProgressEvent;
 
-        return this.waitForProgress(
-          logicalId,
-          logicalResource.Type,
-          properties,
-          progress
-        );
-      })());
+          if (progress === undefined) {
+            throw new Error(
+              `DeleteResourceCommand returned an unefined ProgressEvent`
+            );
+          }
+
+          return this.waitForProgress(
+            logicalId,
+            logicalResource.Type,
+            properties,
+            progress,
+            cancellationToken
+          );
+        })(),
+      });
     }
   }
 
+  /**
+   * Wait for the Resource Create/Update/Delete request to conclude.
+   *
+   * @param logicalId ID of the {@link LogicalResource}.
+   * @param type the {@link LogicalResource} Type.
+   * @param properties the input {@link PhysicalProperties}
+   * @param progress a {@link control.ProgressEvent}
+   * @param cancellationToken a {@link CancellationToken} for interrupting this task midway through completion.
+   * @returns the {@link PhysicalResource} if the task completes successfully, otherwise `undefined`.
+   */
   private async waitForProgress(
     logicalId: string,
     type: ResourceType,
     properties: PhysicalProperties,
-    progress: control.ProgressEvent
-  ): Promise<PhysicalResource> {
+    progress: control.ProgressEvent,
+    cancellationToken?: CancellationToken
+  ): Promise<PhysicalResource | undefined> {
     do {
       const opStatus = progress?.OperationStatus;
       if (opStatus === "SUCCESS") {
@@ -573,6 +697,33 @@ export class Stack {
       } catch (err) {
         console.error(err);
         throw err;
+      }
+
+      if (cancellationToken?.isCancelled) {
+        // try and cancel the operation before giving the task more time to finish
+        const cancelEvent = (
+          await this.controlClient.send(
+            new control.CancelResourceRequestCommand({
+              RequestToken: progress?.RequestToken,
+            })
+          )
+        ).ProgressEvent;
+
+        if (cancelEvent) {
+          try {
+            await this.waitForProgress(
+              logicalId,
+              type,
+              properties,
+              cancelEvent
+            );
+          } catch (err) {
+            // what to do?
+            throw err;
+          }
+        } else {
+          //
+        }
       }
 
       const retryAfter = progress?.RetryAfter?.getTime();
@@ -643,11 +794,12 @@ export class Stack {
       if (paramDef !== undefined) {
         return this.evaluateParameter(state, expr.Ref, paramDef);
       } else {
-        return (await this.updateResource(state, expr.Ref))?.PhysicalId;
+        return (await this.updateResource(state, expr.Ref).resource)
+          ?.PhysicalId;
       }
     } else if (isFnGetAtt(expr)) {
       const [logicalId, attributeName] = expr["Fn::GetAtt"];
-      const resource = await this.updateResource(state, logicalId);
+      const resource = await this.updateResource(state, logicalId).resource;
       if (resource === undefined) {
         throw new Error(
           `Resource '${logicalId}' does not exist, perhaps a Condition is preventing it from being created?`

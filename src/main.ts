@@ -10,20 +10,24 @@ export async function main() {
     stackName: "my-stack",
   });
 
-  let state = await deployer.updateStack(template(0), {
-    HashKey: "Album",
-  });
+  let state = await deployer
+    .updateStack(template(0), {
+      HashKey: "Album",
+    })
+    .execute();
   console.log("Create", state);
 
   // this update should delete the orhanned stream
-  state = await deployer.updateStack(template(1), {
-    HashKey: "Album",
-  });
+  state = await deployer
+    .updateStack(template(1), {
+      HashKey: "Album",
+    })
+    .execute();
 
   console.log("Update", state);
 
   // delete the whole stack
-  await deployer.deleteStack();
+  await deployer.deleteStack().execute();
 }
 
 function template(version: number): CloudFormationTemplate {
