@@ -58,9 +58,68 @@
 	<div class="row">
 		<div class="col-8 col-content">
 			<div class="tsd-panel tsd-typography">
-				<a href="#replace-this" id="replace-this" style="color: inherit; text-decoration: none;">
-					<h1>replace this</h1>
+				<a href="#node-cfn" id="node-cfn" style="color: inherit; text-decoration: none;">
+					<h1>node-cfn</h1>
 				</a>
+				<p>This is a toy-implementation of the AWS CloudFormation deployment engine in TypeScript and Node-JS. It was built as an experiment to better underestand why CloudFormation is so slow and to also experiment locally with new features.</p>
+				<p>It is built on top of the <a href="https://aws.amazon.com/cloudcontrolapi/">AWS Cloud Control API</a> and thus only supports the <a href="https://docs.aws.amazon.com/cloudcontrolapi/latest/userguide/supported-resources.html">resources that are supported by the Cloud Control API</a>.</p>
+				<p>The most important missing feature right now is Rollbacks, so this tool should not be considered useful for any type of production service. The hope is that it can become a playground for CloudFormation enhancements and to stand as a performance benchmark for the official AWS CloudFormation sevice. I dream of the day when CloudFormation is as fast as Terraform and Pulumi&#39;s provisioning engines.</p>
+				<a href="#supported-features" id="supported-features" style="color: inherit; text-decoration: none;">
+					<h2>Supported Features</h2>
+				</a>
+				<ul>
+					<li><input checked="" disabled="" type="checkbox"> Stack Create, Update and Delete</li>
+					<li><input checked="" disabled="" type="checkbox"> Stack Parameters</li>
+					<li><input checked="" disabled="" type="checkbox"> Resource Conditions</li>
+					<li><input checked="" disabled="" type="checkbox"> Intrinsic Functions (<code>Ref</code>, <code>!Ref</code>, <code>Fn::GetAtt</code>, <code>Fn::Join</code>, <code>Fn::Split</code>, <code>Fn::Select</code>, <code>Fn::FindInMap</code>, <code>Fn::Sub</code>, etc.)</li>
+					<li><input disabled="" type="checkbox"> Rollbacks on failure</li>
+					<li><input disabled="" type="checkbox"> Outputs and cross-stack references</li>
+				</ul>
+				<a href="#usage" id="usage" style="color: inherit; text-decoration: none;">
+					<h2>Usage</h2>
+				</a>
+				<pre><code class="language-ts"><span style="color: #AF00DB">import</span><span style="color: #000000"> { </span><span style="color: #001080">CloudFormationTemplate</span><span style="color: #000000">, </span><span style="color: #001080">Stack</span><span style="color: #000000"> } </span><span style="color: #AF00DB">from</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;node-cfn&quot;</span><span style="color: #000000">;</span>
+
+<span style="color: #0000FF">const</span><span style="color: #000000"> </span><span style="color: #0070C1">deployer</span><span style="color: #000000"> = </span><span style="color: #0000FF">new</span><span style="color: #000000"> </span><span style="color: #795E26">Stack</span><span style="color: #000000">({</span>
+<span style="color: #000000">  </span><span style="color: #001080">account:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;&lt;aws-account&gt;&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">  </span><span style="color: #001080">region:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;&lt;aws-region&gt;&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">  </span><span style="color: #001080">stackName:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;my-stack&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">});</span>
+
+<span style="color: #0000FF">const</span><span style="color: #000000"> </span><span style="color: #0070C1">template</span><span style="color: #000000">: </span><span style="color: #267F99">CloudFormationTemplate</span><span style="color: #000000"> = {</span>
+<span style="color: #000000">  </span><span style="color: #001080">AWSTemplateFormatVersion:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;2010-09-09&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">  </span><span style="color: #001080">Parameters:</span><span style="color: #000000"> {</span>
+<span style="color: #000000">    </span><span style="color: #001080">ShardCount:</span><span style="color: #000000"> {</span>
+<span style="color: #000000">      </span><span style="color: #001080">Type:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;Number&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">      </span><span style="color: #001080">MinValue:</span><span style="color: #000000"> </span><span style="color: #098658">1</span><span style="color: #000000">,</span>
+<span style="color: #000000">    },</span>
+<span style="color: #000000">  },</span>
+<span style="color: #000000">  </span><span style="color: #001080">Resources:</span><span style="color: #000000"> {</span>
+<span style="color: #000000">    </span><span style="color: #001080">MyStream:</span><span style="color: #000000"> {</span>
+<span style="color: #000000">      </span><span style="color: #001080">Type:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;AWS::Kinesis::Stream&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">      </span><span style="color: #001080">Properties:</span><span style="color: #000000"> {</span>
+<span style="color: #000000">        </span><span style="color: #001080">Name:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;MyKinesisStream&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">        </span><span style="color: #001080">RetentionPeriodHours:</span><span style="color: #000000"> </span><span style="color: #098658">168</span><span style="color: #000000">,</span>
+<span style="color: #000000">        </span><span style="color: #001080">ShardCount:</span><span style="color: #000000"> {</span>
+<span style="color: #000000">          </span><span style="color: #001080">Ref:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;ShardCount&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">        },</span>
+<span style="color: #000000">        </span><span style="color: #001080">Tags:</span><span style="color: #000000"> [</span>
+<span style="color: #000000">          {</span>
+<span style="color: #000000">            </span><span style="color: #001080">Key:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;Environment&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">            </span><span style="color: #001080">Value:</span><span style="color: #000000"> </span><span style="color: #A31515">&quot;Production&quot;</span><span style="color: #000000">,</span>
+<span style="color: #000000">          },</span>
+<span style="color: #000000">        ],</span>
+<span style="color: #000000">      },</span>
+<span style="color: #000000">    },</span>
+<span style="color: #000000">  },</span>
+<span style="color: #000000">};</span>
+
+<span style="color: #0000FF">let</span><span style="color: #000000"> </span><span style="color: #001080">state</span><span style="color: #000000"> = </span><span style="color: #AF00DB">await</span><span style="color: #000000"> </span><span style="color: #001080">deployer</span><span style="color: #000000">.</span><span style="color: #795E26">updateStack</span><span style="color: #000000">(</span><span style="color: #001080">template</span><span style="color: #000000">, {</span>
+<span style="color: #000000">  </span><span style="color: #001080">ShardCount:</span><span style="color: #000000"> </span><span style="color: #098658">1</span><span style="color: #000000">,</span>
+<span style="color: #000000">});</span>
+
+<span style="color: #001080">state</span><span style="color: #000000"> = </span><span style="color: #AF00DB">await</span><span style="color: #000000"> </span><span style="color: #001080">deployer</span><span style="color: #000000">.</span><span style="color: #795E26">updateStack</span><span style="color: #000000">(</span><span style="color: #001080">newState</span><span style="color: #000000">);</span>
+</code></pre>
 			</div>
 		</div>
 		<div class="col-4 col-menu menu-sticky-wrap menu-highlight">
@@ -80,6 +139,9 @@
 					</li>
 					<li class=" tsd-kind-module">
 						<a href="modules/graph.html">graph</a>
+					</li>
+					<li class=" tsd-kind-module">
+						<a href="modules/index.html">index</a>
 					</li>
 					<li class=" tsd-kind-module">
 						<a href="modules/main.html">main</a>

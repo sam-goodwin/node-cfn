@@ -15,6 +15,7 @@ const project = new typescript.TypeScriptProject({
   eslintOptions: {
     prettier: true,
   },
+  releaseToNpm: true,
   docgen: true,
   gitignore: [".DS_Store"],
 });
