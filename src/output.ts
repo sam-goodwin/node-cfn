@@ -1,6 +1,6 @@
 import { Expression } from "./expression";
 
-// @ts-ignore - impoted for tsdoc
+// @ts-ignore - imported for tsdoc
 import type { Stack } from "./stack;";
 
 /**

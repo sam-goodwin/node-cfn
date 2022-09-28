@@ -89,6 +89,7 @@ export function validateParameter(
     if (paramDef.Default === undefined) {
       throw new Error(`Missing required input-Parameter ${paramName}`);
     }
+    paramVal = paramDef.Default;
   }
 
   if (paramDef.AllowedPattern) {

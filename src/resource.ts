@@ -44,7 +44,7 @@ export interface LogicalResource {
   /**
    * The Resource's {@link LogicalProperties} configuration.
    */
-  Properties: LogicalProperties;
+  Properties?: LogicalProperties;
   /**
    * With the DeletionPolicy attribute you can preserve, and in some cases, backup a resource when its stack is deleted.
    */

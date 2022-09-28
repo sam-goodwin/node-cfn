@@ -1,6 +1,8 @@
 /* eslint-disable @typescript-eslint/no-shadow */
 import * as control from "@aws-sdk/client-cloudcontrol";
 import * as ssm from "@aws-sdk/client-ssm";
+import * as events from "@aws-sdk/client-eventbridge";
+import * as iam from "@aws-sdk/client-iam";
 
 import { compare } from "fast-json-patch";
 import { Expression } from "./expression";
@@ -69,6 +71,10 @@ export interface StackState {
    * Map of the provisioned {@link PhysicalResources} addressable by their Logical ID.
    */
   resources: PhysicalResources;
+  /**
+   * Outputs of the stack
+   */
+  outputs: Record<string, string>;
 }
 
 export interface UpdateState {
@@ -133,6 +139,12 @@ export interface StackProps {
    * @default - one is created with default configuration
    */
   readonly ssmClient?: ssm.SSMClient;
+  /**
+   * SDK config used to create new clients.
+   *
+   * TODO: fix this...
+   */
+  readonly sdkConfig?: any;
 }
 
 /**
@@ -159,6 +171,8 @@ export class Stack {
    * The {@link ssm.SSMClient} to use when resolving {@link SSMParameterType}
    */
   readonly ssmClient: ssm.SSMClient;
+  readonly eventBridgeClient: events.EventBridgeClient;
+  readonly iamClient: iam.IAMClient;
 
   /**
    * Current {@link StackState} of the {@link Stack}.
@@ -180,6 +194,8 @@ export class Stack {
       new ssm.SSMClient({
         region: this.region,
       });
+    this.eventBridgeClient = new events.EventBridgeClient(props.sdkConfig);
+    this.iamClient = new iam.IAMClient(props.sdkConfig);
   }
 
   /**
@@ -210,17 +226,6 @@ export class Stack {
       state.previousState?.Resources[logicalId];
     if (resource === undefined) {
       throw new Error(`resource does not exist: '${logicalId}'`);
-    }
-    if (resource.Type === "AWS::DynamoDB::Table") {
-      // CloudControl API doesn't support AWS::DynamoDB::Table
-      // so as a quick hack, we map it to AWS::DynamoDB::GlobalTable which is supported.
-      resource.Type = "AWS::DynamoDB::GlobalTable";
-      resource.Properties.Replicas = [
-        {
-          Region: this.region,
-          SSESpecification: resource.Properties.SSESpecification,
-        },
-      ];
     }
     return resource;
   }
@@ -257,15 +262,14 @@ export class Stack {
    */
   private async deleteResources(logicalIds: string[], state: UpdateState) {
     const allowedLogicalIds = new Set(logicalIds);
-    return Promise.all(
-      logicalIds.map(async (logicalId) => {
-        state.tasks[logicalId] = this.deleteResource(
-          logicalId,
-          state,
-          allowedLogicalIds
-        );
-      })
-    );
+    return logicalIds.map((logicalId) => {
+      console.log("Add DELETE: " + logicalId);
+      state.tasks[logicalId] = this.deleteResource(
+        logicalId,
+        state,
+        allowedLogicalIds
+      );
+    });
   }
 
   /**
@@ -301,7 +305,7 @@ export class Stack {
       (deletionPolicy === undefined &&
         (physicalResource.Type === "AWS::RDS::DBCluster" ||
           (physicalResource.Type === "AWS::RDS::DBInstance" &&
-            logicalResource.Properties.DBClusterIdentifier === undefined)))
+            logicalResource.Properties?.DBClusterIdentifier === undefined)))
     ) {
       // RDS defaults to Snapshot in certain conditions, so we detect them and error here
       // since we don't yet support DeletionPolicy.Snapshot
@@ -384,50 +388,69 @@ export class Stack {
       parameterValues,
       tasks: {},
     };
+    try {
+      await this.validateParameters(desiredState, parameterValues);
+      if (desiredState.Rules) {
+        await this.validateRules(desiredState.Rules, state);
+      }
 
-    await this.validateParameters(desiredState, parameterValues);
-    if (desiredState.Rules) {
-      await this.validateRules(desiredState.Rules, state);
-    }
-
-    // create new resources
-    this.state = {
-      template: desiredState,
-      resources: {
-        ...(this.state?.resources ?? {}),
-        ...(
-          await Promise.all(
-            Object.keys(desiredState.Resources).map(async (logicalId) => {
-              const resource = await this.updateResource(state, logicalId);
-              return resource
-                ? {
-                    [logicalId]: resource,
-                  }
-                : undefined;
-            })
+      // create new resources
+      this.state = {
+        template: desiredState,
+        resources: {
+          ...(this.state?.resources ?? {}),
+          ...(
+            await Promise.all(
+              Object.keys(desiredState.Resources).map(async (logicalId) => {
+                const resource = await this.updateResource(state, logicalId);
+                return resource
+                  ? {
+                      [logicalId]: resource,
+                    }
+                  : undefined;
+              })
+            )
           )
-        )
-          .filter(<T>(a: T): a is Exclude<T, undefined> => a !== undefined)
-          .reduce((a, b) => ({ ...a, ...b }), {}),
-      },
-    };
+            .filter(<T>(a: T): a is Exclude<T, undefined> => a !== undefined)
+            .reduce((a, b) => ({ ...a, ...b }), {}),
+        },
+        outputs: Object.fromEntries(
+          await Promise.all(
+            Object.entries(desiredState.Outputs ?? {}).map(
+              async ([name, value]) => [
+                name,
+                // @ts-ignore
+                await this.evaluateExpr(value, state).then((x) => x.Value),
+              ]
+            )
+          )
+        ),
+      };
 
-    // clear tasks
-    state.tasks = {};
+      // delete orhpanned resources
+      const orhpannedLogicalIds =
+        previousState === undefined
+          ? []
+          : discoverOrphanedDependencies(previousState, desiredState);
 
-    // delete orhpanned resources
-    const orhpannedLogicalIds =
-      previousState === undefined
-        ? []
-        : discoverOrphanedDependencies(previousState, desiredState);
+      await this.deleteResources(orhpannedLogicalIds, state);
 
-    await this.deleteResources(orhpannedLogicalIds, state);
+      for (const orphanedLogicalId of orhpannedLogicalIds) {
+        delete this.state?.resources[orphanedLogicalId];
+      }
 
-    for (const orphanedLogicalId of orhpannedLogicalIds) {
-      delete this.state?.resources[orphanedLogicalId];
+      return this.state;
+    } finally {
+      console.log("Cleaning Up");
+
+      // await any leaf tasks not awaited already
+      await Promise.allSettled(Object.values(state.tasks));
+
+      // TODO: tasks can add more tasks, this may not be the end, need to resolve until empty
+
+      // clear tasks
+      state.tasks = {};
     }
-
-    return this.state;
   }
 
   /**
@@ -447,8 +470,10 @@ export class Stack {
   ): Promise<PhysicalResource | undefined> {
     const logicalResource = this.getLogicalResource(logicalId, state);
     if (logicalId in state.tasks) {
+      console.log("Task Cache Hit: " + logicalId);
       return state.tasks[logicalId];
     } else {
+      console.log("Add UPDATE: " + logicalId);
       return (state.tasks[logicalId] = (async () => {
         if (logicalResource.Condition) {
           const conditionRule =
@@ -467,59 +492,302 @@ export class Stack {
           }
         }
 
-        const properties = (
-          await Promise.all(
-            Object.entries(logicalResource.Properties).map(
-              async ([propName, propExpr]) => {
-                return {
-                  [propName]: await this.evaluateExpr(propExpr, state),
-                };
-              }
-            )
-          )
-        ).reduce((a, b) => ({ ...a, ...b }), {});
+        const properties = logicalResource.Properties
+          ? (
+              await Promise.all(
+                Object.entries(logicalResource.Properties).map(
+                  async ([propName, propExpr]) => {
+                    return {
+                      [propName]: await this.evaluateExpr(propExpr, state),
+                    };
+                  }
+                )
+              )
+            ).reduce((a, b) => ({ ...a, ...b }), {})
+          : {};
 
         const physicalResource = this.getPhysicalResource(logicalId);
-        let controlApiResult;
-        if (physicalResource === undefined) {
-          console.log(`Creating ${logicalId} (${logicalResource.Type})`);
-          controlApiResult = await this.controlClient.send(
-            new control.CreateResourceCommand({
-              TypeName: logicalResource.Type,
-              DesiredState: JSON.stringify(properties),
-            })
-          );
-        } else {
-          const patch = compare(physicalResource.InputProperties, properties);
-          if (patch.length === 0) {
-            console.log(
-              `Skipping Update of ${logicalId} (${logicalResource.Type})`
+        const update = physicalResource !== undefined;
+        if (logicalResource.Type === "AWS::Events::EventBus") {
+          let result: { arn: string };
+          try {
+            const r = await this.eventBridgeClient.send(
+              new events.CreateEventBusCommand(
+                properties as unknown as events.CreateEventBusCommandInput
+              )
             );
-            return physicalResource;
+            if (!r.EventBusArn) {
+              throw new Error("Expected event arn");
+            }
+            result = {
+              arn: r.EventBusArn,
+            };
+          } catch (err) {
+            // TODO: support updates.
+            if (err instanceof events.ResourceAlreadyExistsException) {
+              result = {
+                arn: `arn:aws:events:${this.region}:${this.account}:event-bus/${properties.Name}`,
+              };
+            } else {
+              throw err;
+            }
           }
-          console.log(`Updating ${logicalId} (${logicalResource.Type})`);
-          controlApiResult = await this.controlClient.send(
-            new control.UpdateResourceCommand({
-              TypeName: logicalResource.Type,
-              PatchDocument: JSON.stringify(patch),
-              Identifier: physicalResource.PhysicalId,
-            })
+          return {
+            PhysicalId: result.arn,
+            Attributes: {
+              Arn: result.arn,
+            },
+            InputProperties: properties,
+            Type: logicalResource.Type,
+          };
+        } else if (logicalResource.Type === "AWS::IAM::Policy") {
+          /**
+           * {
+           *   "Groups" : [ String, ... ],
+           *   "PolicyDocument" : Json,
+           *   "PolicyName" : String,
+           *   "Roles" : [ String, ... ],
+           *   "Users" : [ String, ... ]
+           * }
+           */
+          const props = properties as {
+            Groups: string[];
+            PolicyDocument: any;
+            PolicyName: string;
+            Roles: string[];
+            Users: string[];
+          };
+          // create the role
+          let result: {
+            arn: string;
+            groups: string[];
+            roles: string[];
+            users: string[];
+          };
+          try {
+            const r = await this.iamClient.send(
+              new iam.CreatePolicyCommand({
+                PolicyDocument: JSON.stringify(props.PolicyDocument),
+                PolicyName: props.PolicyName as string,
+              })
+            );
+            if (!r.Policy || !r.Policy.Arn) {
+              throw new Error("Expected policy");
+            }
+            result = {
+              arn: r.Policy.Arn,
+              groups: [],
+              roles: [],
+              users: [],
+            };
+          } catch (err) {
+            let _err = err as { name: string };
+            // if the entity exists, just provide the arn and move on.
+            // TODO: check if the role attachments need to change.
+            if (_err.name === "EntityAlreadyExists") {
+              const arn = `arn:aws:iam::${this.account}:policy/${props.PolicyName}`;
+              let entities: Pick<
+                iam.ListEntitiesForPolicyCommandOutput,
+                "PolicyGroups" | "PolicyRoles" | "PolicyUsers"
+              > = {};
+              let response: iam.ListEntitiesForPolicyCommandOutput = {
+                IsTruncated: true,
+                $metadata: {},
+              };
+              await this.iamClient.send(
+                new iam.CreatePolicyVersionCommand({
+                  PolicyArn: arn,
+                  PolicyDocument: JSON.stringify(props.PolicyDocument),
+                })
+              );
+              while (response.IsTruncated) {
+                response = await this.iamClient.send(
+                  new iam.ListEntitiesForPolicyCommand({ PolicyArn: arn })
+                );
+                entities = {
+                  PolicyGroups: [
+                    ...(entities.PolicyGroups ?? []),
+                    ...(response.PolicyGroups ?? []),
+                  ],
+                  PolicyRoles: [
+                    ...(entities.PolicyRoles ?? []),
+                    ...(response.PolicyRoles ?? []),
+                  ],
+                  PolicyUsers: [
+                    ...(entities.PolicyUsers ?? []),
+                    ...(response.PolicyUsers ?? []),
+                  ],
+                };
+              }
+
+              result = {
+                arn: `arn:aws:iam::${this.account}:policy/${props.PolicyName}`,
+                groups: (entities.PolicyGroups ?? [])
+                  .map((g) => g.GroupName)
+                  .filter((g): g is string => !!g),
+                roles: (entities.PolicyRoles ?? [])
+                  .map((r) => r.RoleName)
+                  .filter((r): r is string => !!r),
+                users: (entities.PolicyUsers ?? [])
+                  .map((u) => u.UserName)
+                  .filter((u): u is string => !!u),
+              };
+            } else {
+              throw err;
+            }
+          }
+          const addGroups = (props.Groups ?? []).filter(
+            (g) => !result.groups.includes(g)
+          );
+          // then attach the groups and roles and users
+          const attachGroups = addGroups.map((group) =>
+            this.iamClient.send(
+              new iam.AttachGroupPolicyCommand({
+                GroupName: group,
+                PolicyArn: result.arn,
+              })
+            )
+          );
+          const removeGroups = props.Groups
+            ? result.groups.filter((g) => !props.Groups.includes(g))
+            : [];
+          const detachGroups = removeGroups.map((g) =>
+            this.iamClient.send(
+              new iam.DetachGroupPolicyCommand({
+                GroupName: g,
+                PolicyArn: result.arn,
+              })
+            )
+          );
+          const addRoles = (props.Roles ?? []).filter(
+            (r) => !result.roles.includes(r)
+          );
+          const attachRoles = addRoles.map((role) =>
+            this.iamClient.send(
+              new iam.AttachRolePolicyCommand({
+                RoleName: role,
+                PolicyArn: result.arn,
+              })
+            )
+          );
+          const removeRoles = props.Roles
+            ? result.roles.filter((r) => !props.Roles.includes(r))
+            : [];
+          const detachRoles = removeRoles.map((r) =>
+            this.iamClient.send(
+              new iam.DetachRolePolicyCommand({
+                RoleName: r,
+                PolicyArn: result.arn,
+              })
+            )
+          );
+          const addUsers = (props.Users ?? []).filter(
+            (r) => !result.users.includes(r)
+          );
+          const attachUser = addUsers.map((user) =>
+            this.iamClient.send(
+              new iam.AttachUserPolicyCommand({
+                UserName: user,
+                PolicyArn: result.arn,
+              })
+            )
+          );
+          const removeUsers = props.Users
+            ? result.users.filter((u) => !props.Users.includes(u))
+            : [];
+          const detachUsers = removeUsers.map((u) =>
+            this.iamClient.send(
+              new iam.DetachUserPolicyCommand({
+                UserName: u,
+                PolicyArn: result.arn,
+              })
+            )
+          );
+
+          await Promise.all([
+            ...attachGroups,
+            ...detachGroups,
+            ...attachRoles,
+            ...detachRoles,
+            ...attachUser,
+            ...detachUsers,
+          ]);
+
+          return {
+            PhysicalId: result.arn,
+            Type: logicalResource.Type,
+            InputProperties: properties,
+            Attributes: {
+              Arn: result.arn,
+            },
+          };
+        } else {
+          let controlApiResult;
+          if (!update) {
+            console.log(`Creating ${logicalId} (${logicalResource.Type})`);
+            const props = (() => {
+              if (logicalResource.Type === "AWS::DynamoDB::Table") {
+                // dynamo table pay_per_request fails when ProvisionedThroughput is present.
+                if (properties.BillingMode === "PAY_PER_REQUEST ") {
+                  const { ProvisionedThroughput, ...props } = properties;
+                  return props;
+                }
+              }
+              return properties;
+            })();
+            try {
+              console.log(
+                `Starting Create for ${logicalResource.Type}: ${logicalId}`
+              );
+              controlApiResult = await this.controlClient.send(
+                new control.CreateResourceCommand({
+                  TypeName: logicalResource.Type,
+                  DesiredState: JSON.stringify(props),
+                })
+              );
+            } catch (err) {
+              console.error(
+                `error while deploying (${(<any>err).message}) ${JSON.stringify(
+                  logicalResource,
+                  null,
+                  2
+                )} with props ${JSON.stringify(props, null, 2)}`
+              );
+              throw err;
+            }
+          } else {
+            const patch = compare(physicalResource.InputProperties, properties);
+            if (patch.length === 0) {
+              console.log(
+                `Skipping Update of ${logicalId} (${logicalResource.Type})`
+              );
+              return physicalResource;
+            }
+            console.log(`Updating ${logicalId} (${logicalResource.Type})`);
+            controlApiResult = await this.controlClient.send(
+              new control.UpdateResourceCommand({
+                TypeName: logicalResource.Type,
+                PatchDocument: JSON.stringify(patch),
+                Identifier: physicalResource.PhysicalId,
+              })
+            );
+          }
+
+          const progress = controlApiResult.ProgressEvent;
+
+          if (progress === undefined) {
+            throw new Error(
+              `DeleteResourceCommand returned an unefined ProgressEvent`
+            );
+          }
+
+          return this.waitForProgress(
+            logicalId,
+            logicalResource.Type,
+            properties,
+            progress
           );
         }
-        const progress = controlApiResult.ProgressEvent;
-
-        if (progress === undefined) {
-          throw new Error(
-            `DeleteResourceCommand returned an unefined ProgressEvent`
-          );
-        }
-
-        return this.waitForProgress(
-          logicalId,
-          logicalResource.Type,
-          properties,
-          progress
-        );
       })());
     }
   }
@@ -534,6 +802,7 @@ export class Stack {
       const opStatus = progress?.OperationStatus;
       if (opStatus === "SUCCESS") {
         console.log(`${progress.Operation} Success: ${logicalId} (${type})`);
+        console.log(`Waiting for: ${logicalId}`);
         const attributes =
           progress.Operation === "DELETE"
             ? undefined
@@ -562,6 +831,15 @@ export class Stack {
         throw new Error(errorMessage);
       }
 
+      const retryAfter = progress?.RetryAfter?.getTime();
+      if (!retryAfter) console.log("no retry after?", progress);
+      const waitTime = Math.max(
+        retryAfter ? retryAfter - Date.now() : 1000,
+        1000
+      );
+      console.log(`Waiting for (${waitTime}): ${logicalId}`);
+      await new Promise((resolve) => setTimeout(resolve, waitTime));
+
       try {
         progress = (
           await this.controlClient.send(
@@ -574,13 +852,6 @@ export class Stack {
         console.error(err);
         throw err;
       }
-
-      const retryAfter = progress?.RetryAfter?.getTime();
-      const waitTime = Math.max(
-        retryAfter ? retryAfter - Date.now() : 1000,
-        1000
-      );
-      await new Promise((resolve) => setTimeout(resolve, waitTime));
     } while (true);
   }
 
@@ -639,6 +910,9 @@ export class Stack {
     const parameterValues = state.parameterValues ?? {};
 
     if (isRef(expr)) {
+      if (isPseudoParameter(expr.Ref)) {
+        return this.evaluatePseudoParameter(expr.Ref);
+      }
       const paramDef = parameters[expr.Ref];
       if (paramDef !== undefined) {
         return this.evaluateParameter(state, expr.Ref, paramDef);
@@ -669,6 +943,19 @@ export class Stack {
       ).join(delimiter);
     } else if (isFnSelect(expr)) {
       const [index, listOfObjects] = expr["Fn::Select"];
+      if (isIntrinsicFunction(listOfObjects)) {
+        const evaled = await this.evaluateIntrinsicFunction(
+          state,
+          listOfObjects
+        );
+        if (!Array.isArray(evaled)) {
+          throw new Error(`Expected an array, found: ${evaled}`);
+        } else if (index in evaled) {
+          return evaled[index];
+        } else {
+          throw new Error(`index ${index} out of bounds in list: ${evaled}`);
+        }
+      }
       if (index in listOfObjects) {
         return this.evaluateExpr(listOfObjects[index], state);
       } else {
@@ -686,25 +973,39 @@ export class Stack {
       }
       return sourceString.split(delimiter);
     } else if (isFnSub(expr)) {
-      const [string, variables] = expr["Fn::Sub"];
-      let result = string;
-      await Promise.all(
-        Object.entries(variables).map(async ([varName, varVal]) => {
-          const resolvedVal = await this.evaluateExpr(varVal, state);
-          if (
-            typeof resolvedVal === "string" ||
-            typeof resolvedVal === "number" ||
-            typeof resolvedVal === "boolean"
-          ) {
-            result = result.replace(`$${varName}`, resolvedVal.toString());
-          } else {
-            throw new Error(
-              `Variable '${varName}' in Fn::Sub did not resolve to a String, Number or Boolean`
-            );
-          }
-        })
+      const [string, variables] =
+        typeof expr["Fn::Sub"] === "string"
+          ? [expr["Fn::Sub"], {}]
+          : expr["Fn::Sub"];
+      const resolvedValues = Object.fromEntries(
+        await Promise.all(
+          Object.entries(variables).map(async ([varName, varVal]) => [
+            varName,
+            await this.evaluateExpr(varVal, state),
+          ])
+        )
       );
-      return result;
+
+      // match "something ${this} something"
+      return string.replace(/\$\{([^\}]*)\}/g, (_, varName) => {
+        const varVal =
+          varName in resolvedValues
+            ? resolvedValues[varName]
+            : isPseudoParameter(varName)
+            ? this.evaluatePseudoParameter(varName)
+            : undefined;
+        if (
+          typeof varVal === "string" ||
+          typeof varVal === "number" ||
+          typeof varVal === "boolean"
+        ) {
+          return `${varVal}`;
+        } else {
+          throw new Error(
+            `Variable '${varName}' in Fn::Sub did not resolve to a String, Number or Boolean: ${varVal}`
+          );
+        }
+      });
     } else if (isFnBase64(expr)) {
       const exprVal = await this.evaluateExpr(expr["Fn::Base64"], state);
       if (typeof exprVal === "string") {

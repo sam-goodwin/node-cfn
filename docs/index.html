@@ -61,9 +61,9 @@
 				<a href="#node-cfn" id="node-cfn" style="color: inherit; text-decoration: none;">
 					<h1>node-cfn</h1>
 				</a>
-				<p>This is a toy-implementation of the AWS CloudFormation deployment engine in TypeScript and Node-JS. It was built as an experiment to better underestand why CloudFormation is so slow and to also experiment locally with new features.</p>
+				<p>This is a toy-implementation of the AWS CloudFormation deployment engine in TypeScript and Node-JS. It was built as an experiment to better understand why CloudFormation is so slow and to also experiment locally with new features.</p>
 				<p>It is built on top of the <a href="https://aws.amazon.com/cloudcontrolapi/">AWS Cloud Control API</a> and thus only supports the <a href="https://docs.aws.amazon.com/cloudcontrolapi/latest/userguide/supported-resources.html">resources that are supported by the Cloud Control API</a>.</p>
-				<p>The most important missing feature right now is Rollbacks, so this tool should not be considered useful for any type of production service. The hope is that it can become a playground for CloudFormation enhancements and to stand as a performance benchmark for the official AWS CloudFormation sevice. I dream of the day when CloudFormation is as fast as Terraform and Pulumi&#39;s provisioning engines.</p>
+				<p>The most important missing feature right now is Rollbacks, so this tool should not be considered useful for any type of production service. The hope is that it can become a playground for CloudFormation enhancements and to stand as a performance benchmark for the official AWS CloudFormation service. I dream of the day when CloudFormation is as fast as Terraform and Pulumi&#39;s provisioning engines.</p>
 				<a href="#supported-features" id="supported-features" style="color: inherit; text-decoration: none;">
 					<h2>Supported Features</h2>
 				</a>
@@ -74,6 +74,7 @@
 					<li><input checked="" disabled="" type="checkbox"> Intrinsic Functions (<code>Ref</code>, <code>!Ref</code>, <code>Fn::GetAtt</code>, <code>Fn::Join</code>, <code>Fn::Split</code>, <code>Fn::Select</code>, <code>Fn::FindInMap</code>, <code>Fn::Sub</code>, etc.)</li>
 					<li><input disabled="" type="checkbox"> Rollbacks on failure</li>
 					<li><input disabled="" type="checkbox"> Outputs and cross-stack references</li>
+					<li><input disabled="" type="checkbox"> Assets</li>
 				</ul>
 				<a href="#usage" id="usage" style="color: inherit; text-decoration: none;">
 					<h2>Usage</h2>

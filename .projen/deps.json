@@ -101,6 +101,14 @@
       "type": "runtime"
     },
     {
+      "name": "@aws-sdk/client-eventbridge",
+      "type": "runtime"
+    },
+    {
+      "name": "@aws-sdk/client-iam",
+      "type": "runtime"
+    },
+    {
       "name": "@aws-sdk/client-ssm",
       "type": "runtime"
     },

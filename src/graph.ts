@@ -34,8 +34,10 @@ export function buildDependencyGraph(
   const graph: DependencyGraph = {};
   for (const [logicalId, resource] of Object.entries(template.Resources)) {
     const references: string[] = [];
-    for (const propExpr of Object.values(resource.Properties)) {
-      references.push(...findReferences(propExpr));
+    if (resource.Properties) {
+      for (const propExpr of Object.values(resource.Properties)) {
+        references.push(...findReferences(propExpr));
+      }
     }
     graph[logicalId] = Array.from(new Set(references));
   }
