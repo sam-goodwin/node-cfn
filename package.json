@@ -53,6 +53,7 @@
     "@aws-sdk/client-cloudcontrol": "^3.48.0",
     "@aws-sdk/client-eventbridge": "^3.179.0",
     "@aws-sdk/client-iam": "^3.180.0",
+    "@aws-sdk/client-sqs": "^3.180.0",
     "@aws-sdk/client-ssm": "^3.48.0",
     "@aws-sdk/client-sts": "^3.180.0",
     "aws-sdk": "^2.1225.0",

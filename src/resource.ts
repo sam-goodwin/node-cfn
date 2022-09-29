@@ -97,7 +97,7 @@ export interface PhysicalResource {
   /**
    * Physical ID of the {@link PhysicalResource}.
    */
-  PhysicalId: string;
+  PhysicalId?: string;
   /**
    * Input Properties passed to {@link CreateResourceCommand} and {@link UpdateResourceCommand}.
    */

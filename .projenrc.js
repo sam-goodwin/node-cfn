@@ -11,6 +11,7 @@ const project = new typescript.TypeScriptProject({
     "@aws-sdk/client-eventbridge",
     "@aws-sdk/client-iam",
     "@aws-sdk/client-sts",
+    "@aws-sdk/client-sqs",
     "fast-json-patch",
     "immutable",
     "cdk-assets",
