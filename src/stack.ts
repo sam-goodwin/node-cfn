@@ -61,7 +61,12 @@ import { isDeepEqual } from "./util";
 import { Value } from "./value";
 import { AssetManifest, AssetPublishing } from "cdk-assets";
 import AwsClient from "./aws";
-import { EventBusRuleResource, SQSQueuePolicyResource } from "./resource-types";
+import {
+  EventBusRuleResource,
+  ManagedPolicyResource,
+  PolicyResource,
+  SQSQueuePolicyResource,
+} from "./resource-types";
 
 /**
  * A map of each {@link LogicalResource}'s Logical ID to its {@link PhysicalProperties}.
@@ -501,10 +506,14 @@ export class Stack {
     } finally {
       console.log("Cleaning Up");
 
+      console.log(Object.keys(state.tasks).length, Object.keys(state.tasks));
+
       // await any leaf tasks not awaited already
-      (await Promise.allSettled(Object.entries(state.tasks)))
+      (await Promise.allSettled(Object.values(state.tasks)))
         .filter((r): r is PromiseRejectedResult => r.status === "rejected")
         .forEach((r) => console.log("Resource failed: " + r.reason));
+
+      console.log(Object.keys(state.tasks).length, Object.keys(state.tasks));
 
       // TODO: tasks can add more tasks, this may not be the end, need to resolve until empty
 
@@ -635,22 +644,58 @@ export class Stack {
               Attributes: { Arn: r.RuleArn!, Id: input.Name },
             };
           } else if (logicalResource.Type === "AWS::IAM::Policy") {
-            /**
-             * {
-             *   "Groups" : [ String, ... ],
-             *   "PolicyDocument" : Json,
-             *   "PolicyName" : String,
-             *   "Roles" : [ String, ... ],
-             *   "Users" : [ String, ... ]
-             * }
-             */
-            const props = properties as {
-              Groups: string[];
-              PolicyDocument: any;
-              PolicyName: string;
-              Roles: string[];
-              Users: string[];
+            const props = properties as PolicyResource;
+            const policyDocument = JSON.stringify(props.PolicyDocument);
+            const roles = props.Roles?.map((r) =>
+              awsSDKRetry(() =>
+                this.iamClient.send(
+                  new iam.PutRolePolicyCommand({
+                    PolicyDocument: policyDocument,
+                    PolicyName: props.PolicyName,
+                    RoleName: r,
+                  })
+                )
+              )
+            );
+            const groups = props.Groups?.map((g) =>
+              awsSDKRetry(() =>
+                this.iamClient.send(
+                  new iam.PutGroupPolicyCommand({
+                    PolicyDocument: policyDocument,
+                    PolicyName: props.PolicyName,
+                    GroupName: g,
+                  })
+                )
+              )
+            );
+            const users = props.Users?.map((u) =>
+              awsSDKRetry(() =>
+                this.iamClient.send(
+                  new iam.PutUserPolicyCommand({
+                    PolicyDocument: policyDocument,
+                    PolicyName: props.PolicyName,
+                    UserName: u,
+                  })
+                )
+              )
+            );
+
+            await Promise.all([
+              ...(groups ?? []),
+              ...(users ?? []),
+              ...(roles ?? []),
+            ]);
+
+            state.tasks["PolicyPadding"] = wait(10000) as any;
+
+            return {
+              PhysicalId: undefined,
+              Attributes: {},
+              InputProperties: properties,
+              Type: logicalResource.Type,
             };
+          } else if (logicalResource.Type === "AWS::IAM::ManagedPolicy") {
+            const props = properties as ManagedPolicyResource;
             // create the role
             let result: {
               arn: string;
@@ -663,7 +708,10 @@ export class Stack {
                 this.iamClient.send(
                   new iam.CreatePolicyCommand({
                     PolicyDocument: JSON.stringify(props.PolicyDocument),
-                    PolicyName: props.PolicyName as string,
+                    // fix name
+                    PolicyName: props.ManagedPolicyName ?? logicalId,
+                    Description: props.Description,
+                    Path: props.Path,
                   })
                 )
               );
@@ -681,7 +729,10 @@ export class Stack {
               // if the entity exists, just provide the arn and move on.
               // TODO: check if the role attachments need to change.
               if (_err.name === "EntityAlreadyExists") {
-                const arn = `arn:aws:iam::${this.account}:policy/${props.PolicyName}`;
+                // todoL managed policy name must be more unique
+                const name = props.ManagedPolicyName ?? logicalId;
+
+                const arn = `arn:aws:iam::${this.account}:policy/${name}`;
                 let entities: Pick<
                   iam.ListEntitiesForPolicyCommandOutput,
                   "PolicyGroups" | "PolicyRoles" | "PolicyUsers"
@@ -749,7 +800,7 @@ export class Stack {
                 }
 
                 result = {
-                  arn: `arn:aws:iam::${this.account}:policy/${props.PolicyName}`,
+                  arn,
                   groups: (entities.PolicyGroups ?? [])
                     .map((g) => g.GroupName)
                     .filter((g): g is string => !!g),
@@ -779,7 +830,7 @@ export class Stack {
               )
             );
             const removeGroups = props.Groups
-              ? result.groups.filter((g) => !props.Groups.includes(g))
+              ? result.groups.filter((g) => !props.Groups!.includes(g))
               : [];
             const detachGroups = removeGroups.map((g) =>
               awsSDKRetry(() =>
@@ -805,7 +856,7 @@ export class Stack {
               )
             );
             const removeRoles = props.Roles
-              ? result.roles.filter((r) => !props.Roles.includes(r))
+              ? result.roles.filter((r) => !props.Roles!.includes(r))
               : [];
             const detachRoles = removeRoles.map((r) =>
               awsSDKRetry(() =>
@@ -831,7 +882,7 @@ export class Stack {
               )
             );
             const removeUsers = props.Users
-              ? result.users.filter((u) => !props.Users.includes(u))
+              ? result.users.filter((u) => !props.Users!.includes(u))
               : [];
             const detachUsers = removeUsers.map((u) =>
               awsSDKRetry(() =>
@@ -1043,10 +1094,7 @@ export class Stack {
       }
 
       const retryAfter = progress?.RetryAfter?.getTime();
-      const waitTime = Math.max(
-        retryAfter ? retryAfter - Date.now() : 1000,
-        1000
-      );
+      const waitTime = Math.max(retryAfter ? retryAfter - Date.now() : 50, 50);
       console.log(`Waiting for (${waitTime}): ${logicalId}`);
       await new Promise((resolve) => setTimeout(resolve, waitTime));
 
