@@ -342,11 +342,13 @@ export class Stack {
         // if this logicalId is allowed to be deleted, then delete it
         // nite: we always transit dependencies BEFORE any other action is taken
         const progress = (
-          await this.controlClient.send(
-            new control.DeleteResourceCommand({
-              TypeName: physicalResource.Type,
-              Identifier: physicalResource.PhysicalId,
-            })
+          await awsSDKRetry(() =>
+            this.controlClient.send(
+              new control.DeleteResourceCommand({
+                TypeName: physicalResource.Type,
+                Identifier: physicalResource.PhysicalId,
+              })
+            )
           )
         ).ProgressEvent;
 
@@ -431,25 +433,37 @@ export class Stack {
         await this.validateRules(desiredState.Rules, state);
       }
 
+      const resourceResults = await Promise.allSettled(
+        Object.keys(desiredState.Resources).map(async (logicalId) => {
+          const resource = await this.updateResource(state, logicalId);
+          return resource
+            ? {
+                [logicalId]: resource,
+              }
+            : undefined;
+        })
+      );
+      const resourceFailed = resourceResults.filter(
+        (r): r is PromiseRejectedResult => r.status === "rejected"
+      );
+      if (resourceFailed.length > 0) {
+        throw new Error("One or more resources failed.");
+      }
+      const resultValues = resourceResults
+        .map(
+          (r) =>
+            (<Exclude<typeof resourceResults[number], PromiseRejectedResult>>r)
+              .value
+        )
+        .filter(<T>(a: T): a is Exclude<T, undefined> => a !== undefined)
+        .reduce((a, b) => ({ ...a, ...b }), {});
+
       // create new resources
       this.state = {
         template: desiredState,
         resources: {
           ...(this.state?.resources ?? {}),
-          ...(
-            await Promise.all(
-              Object.keys(desiredState.Resources).map(async (logicalId) => {
-                const resource = await this.updateResource(state, logicalId);
-                return resource
-                  ? {
-                      [logicalId]: resource,
-                    }
-                  : undefined;
-              })
-            )
-          )
-            .filter(<T>(a: T): a is Exclude<T, undefined> => a !== undefined)
-            .reduce((a, b) => ({ ...a, ...b }), {}),
+          ...resultValues,
         },
         outputs: Object.fromEntries(
           await Promise.all(
@@ -481,7 +495,9 @@ export class Stack {
       console.log("Cleaning Up");
 
       // await any leaf tasks not awaited already
-      await Promise.allSettled(Object.values(state.tasks));
+      (await Promise.allSettled(Object.entries(state.tasks)))
+        .filter((r): r is PromiseRejectedResult => r.status === "rejected")
+        .forEach((r) => console.log("Resource failed: " + r.reason));
 
       // TODO: tasks can add more tasks, this may not be the end, need to resolve until empty
 
@@ -543,14 +559,28 @@ export class Stack {
             ).reduce((a, b) => ({ ...a, ...b }), {})
           : {};
 
+        if (logicalResource.DependsOn) {
+          const results = await Promise.allSettled(
+            logicalResource.DependsOn.map((logicalDep) =>
+              this.updateResource(state, logicalDep)
+            )
+          );
+          const failed = results.filter((s) => s.status === "rejected");
+          if (failed.length > 0) {
+            throw new Error(`Dependency of ${logicalId} failed, aborting.`);
+          }
+        }
+
         const physicalResource = this.getPhysicalResource(logicalId);
         const update = physicalResource !== undefined;
         if (logicalResource.Type === "AWS::Events::EventBus") {
           let result: { arn: string };
           try {
-            const r = await this.eventBridgeClient.send(
-              new events.CreateEventBusCommand(
-                properties as unknown as events.CreateEventBusCommandInput
+            const r = await awsSDKRetry(() =>
+              this.eventBridgeClient.send(
+                new events.CreateEventBusCommand(
+                  properties as unknown as events.CreateEventBusCommandInput
+                )
               )
             );
             if (!r.EventBusArn) {
@@ -602,11 +632,13 @@ export class Stack {
             users: string[];
           };
           try {
-            const r = await this.iamClient.send(
-              new iam.CreatePolicyCommand({
-                PolicyDocument: JSON.stringify(props.PolicyDocument),
-                PolicyName: props.PolicyName as string,
-              })
+            const r = await awsSDKRetry(() =>
+              this.iamClient.send(
+                new iam.CreatePolicyCommand({
+                  PolicyDocument: JSON.stringify(props.PolicyDocument),
+                  PolicyName: props.PolicyName as string,
+                })
+              )
             );
             if (!r.Policy || !r.Policy.Arn) {
               throw new Error("Expected policy");
@@ -631,11 +663,36 @@ export class Stack {
                 IsTruncated: true,
                 $metadata: {},
               };
-              await this.iamClient.send(
-                new iam.CreatePolicyVersionCommand({
-                  PolicyArn: arn,
-                  PolicyDocument: JSON.stringify(props.PolicyDocument),
-                })
+              const versions = await this.iamClient.send(
+                new iam.ListPolicyVersionsCommand({ PolicyArn: arn })
+              );
+              // prune
+              if (versions.Versions && versions.Versions.length >= 5) {
+                const nonDefaultVersions = versions.Versions.filter(
+                  (v) => !v.IsDefaultVersion
+                );
+                const oldestDate = Math.min(
+                  ...nonDefaultVersions.map(
+                    (v) => v.CreateDate?.getTime() ?? Number.MAX_SAFE_INTEGER
+                  )
+                );
+                const oldest = nonDefaultVersions.find(
+                  (v) => v.CreateDate?.getTime() === oldestDate
+                )!;
+                await this.iamClient.send(
+                  new iam.DeletePolicyVersionCommand({
+                    PolicyArn: arn,
+                    VersionId: oldest.VersionId,
+                  })
+                );
+              }
+              await awsSDKRetry(() =>
+                this.iamClient.send(
+                  new iam.CreatePolicyVersionCommand({
+                    PolicyArn: arn,
+                    PolicyDocument: JSON.stringify(props.PolicyDocument),
+                  })
+                )
               );
               while (response.IsTruncated) {
                 response = await this.iamClient.send(
@@ -776,11 +833,13 @@ export class Stack {
               console.log(
                 `Starting Create for ${logicalResource.Type}: ${logicalId}`
               );
-              controlApiResult = await this.controlClient.send(
-                new control.CreateResourceCommand({
-                  TypeName: logicalResource.Type,
-                  DesiredState: JSON.stringify(props),
-                })
+              controlApiResult = await awsSDKRetry(() =>
+                this.controlClient.send(
+                  new control.CreateResourceCommand({
+                    TypeName: logicalResource.Type,
+                    DesiredState: JSON.stringify(props),
+                  })
+                )
               );
             } catch (err) {
               console.error(
@@ -801,12 +860,14 @@ export class Stack {
               return physicalResource;
             }
             console.log(`Updating ${logicalId} (${logicalResource.Type})`);
-            controlApiResult = await this.controlClient.send(
-              new control.UpdateResourceCommand({
-                TypeName: logicalResource.Type,
-                PatchDocument: JSON.stringify(patch),
-                Identifier: physicalResource.PhysicalId,
-              })
+            controlApiResult = await awsSDKRetry(() =>
+              this.controlClient.send(
+                new control.UpdateResourceCommand({
+                  TypeName: logicalResource.Type,
+                  PatchDocument: JSON.stringify(patch),
+                  Identifier: physicalResource.PhysicalId,
+                })
+              )
             );
           }
 
@@ -843,11 +904,13 @@ export class Stack {
           progress.Operation === "DELETE"
             ? undefined
             : (
-                await this.controlClient.send(
-                  new control.GetResourceCommand({
-                    TypeName: progress.TypeName,
-                    Identifier: progress.Identifier!,
-                  })
+                await awsSDKRetry(() =>
+                  this.controlClient.send(
+                    new control.GetResourceCommand({
+                      TypeName: progress.TypeName,
+                      Identifier: progress.Identifier!,
+                    })
+                  )
                 )
               ).ResourceDescription?.Properties;
 
@@ -878,10 +941,12 @@ export class Stack {
 
       try {
         progress = (
-          await this.controlClient.send(
-            new control.GetResourceRequestStatusCommand({
-              RequestToken: progress?.RequestToken,
-            })
+          await awsSDKRetry(() =>
+            this.controlClient.send(
+              new control.GetResourceRequestStatusCommand({
+                RequestToken: progress?.RequestToken,
+              })
+            )
           )
         ).ProgressEvent!;
       } catch (err) {
@@ -1460,3 +1525,64 @@ function assertIsListOfStrings(
     throw new Error(`The ${argumentName} cannot be empty.`);
   }
 }
+
+async function awsSDKRetry<T>(call: () => T): Promise<Awaited<T>> {
+  return await retry(
+    call,
+    (err) => (err as any).name !== "ThrottlingException",
+    () => true,
+    5,
+    1000,
+    2
+  );
+}
+
+const wait = (waitMillis: number) =>
+  new Promise((resolve) => setTimeout(resolve, waitMillis));
+
+export const retry = async <T>(
+  call: () => T | Promise<T>,
+  errorPredicate: (err: unknown) => boolean,
+  predicate: (val: T) => boolean,
+  attempts: number,
+  waitMillis: number,
+  factor: number
+): Promise<Awaited<T>> => {
+  try {
+    const item = await call();
+    if (!predicate(item)) {
+      if (attempts) {
+        await wait(waitMillis);
+        return retry(
+          call,
+          errorPredicate,
+          predicate,
+          attempts - 1,
+          waitMillis * factor,
+          factor
+        );
+      } else {
+        throw Error("Retry attempts exhausted");
+      }
+    }
+    return item;
+  } catch (err) {
+    if (errorPredicate(err)) {
+      if (attempts) {
+        await wait(waitMillis);
+        return retry(
+          call,
+          errorPredicate,
+          predicate,
+          attempts - 1,
+          waitMillis * factor,
+          factor
+        );
+      } else {
+        console.error(`Retry attempts exhausted ${(<any>err).message}`);
+        throw err;
+      }
+    }
+    throw err;
+  }
+};

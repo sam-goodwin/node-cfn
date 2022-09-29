@@ -36,7 +36,7 @@ export type ResourceType = string;
  * A {@link LogicalResource} is a description of a resource containing its {@link Type}
  * and set of {@link LogicalProperties}.
  *
- * By "Logical", we mean that its {@link Properties} may contain {@link Expresion}s that
+ * By "Logical", we mean that its {@link Properties} may contain {@link Expression}s that
  * must be evaluated to values during Stack Update.
  */
 export interface LogicalResource {
@@ -55,6 +55,10 @@ export interface LogicalResource {
    * @see https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/intrinsic-function-reference-conditions.html
    */
   Condition?: string;
+  /**
+   * LogicalIDs which this resource depends on.
+   */
+  DependsOn?: string[];
 }
 
 /**
