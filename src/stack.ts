@@ -58,6 +58,8 @@ import { Assertion, Rule, RuleFunction, Rules } from "./rule";
 import { CloudFormationTemplate } from "./template";
 import { isDeepEqual } from "./util";
 import { Value } from "./value";
+import { AssetManifest, AssetPublishing } from "cdk-assets";
+import AwsClient from "./aws";
 
 /**
  * A map of each {@link LogicalResource}'s Logical ID to its {@link PhysicalProperties}.
@@ -179,7 +181,14 @@ export class Stack {
    */
   private state: StackState | undefined;
 
+  private awsClient: AwsClient;
+
   constructor(props: StackProps) {
+    this.awsClient = new AwsClient(
+      props.account,
+      props.region,
+      props.sdkConfig
+    );
     this.account = props.account;
     this.region = props.region;
     this.stackName = props.stackName;
@@ -374,9 +383,37 @@ export class Stack {
    */
   public async updateStack(
     desiredState: CloudFormationTemplate,
-    parameterValues?: ParameterValues
+    parameterValues?: ParameterValues,
+    assetManifestFile?: string
   ): Promise<StackState> {
     const previousState = this.state?.template;
+
+    const assetManifest = assetManifestFile
+      ? AssetManifest.fromFile(assetManifestFile)
+      : undefined;
+
+    const publisher = assetManifest
+      ? new AssetPublishing(assetManifest, {
+          aws: this.awsClient,
+          buildAssets: false,
+        })
+      : undefined;
+
+    await Promise.all(
+      assetManifest?.entries.map(async (a) => {
+        console.log("publishing " + a.id);
+        // @ts-ignore
+        await publisher.publishAsset(a);
+      }) ?? []
+    );
+
+    if (publisher?.hasFailures) {
+      throw new Error(
+        publisher.failures
+          .map((f) => `Asset Error ${f.asset.id} ${f.error}`)
+          .join("\n")
+      );
+    }
 
     const state: UpdateState = {
       previousState: this.state?.template,
@@ -802,7 +839,6 @@ export class Stack {
       const opStatus = progress?.OperationStatus;
       if (opStatus === "SUCCESS") {
         console.log(`${progress.Operation} Success: ${logicalId} (${type})`);
-        console.log(`Waiting for: ${logicalId}`);
         const attributes =
           progress.Operation === "DELETE"
             ? undefined
@@ -832,7 +868,7 @@ export class Stack {
       }
 
       const retryAfter = progress?.RetryAfter?.getTime();
-      if (!retryAfter) console.log("no retry after?", progress);
+      if (!retryAfter) console.log("no retry after?", logicalId, progress);
       const waitTime = Math.max(
         retryAfter ? retryAfter - Date.now() : 1000,
         1000
@@ -849,7 +885,7 @@ export class Stack {
           )
         ).ProgressEvent!;
       } catch (err) {
-        console.error(err);
+        console.error("error waiting for ", logicalId, err);
         throw err;
       }
     } while (true);

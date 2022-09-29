@@ -28,7 +28,7 @@
   "devDependencies": {
     "@types/immutable": "^3.8.7",
     "@types/jest": "^27.4.0",
-    "@types/node": "16",
+    "@types/node": "^12",
     "@typescript-eslint/eslint-plugin": "^5",
     "@typescript-eslint/parser": "^5",
     "eslint": "^8",
@@ -54,6 +54,9 @@
     "@aws-sdk/client-eventbridge": "^3.179.0",
     "@aws-sdk/client-iam": "^3.180.0",
     "@aws-sdk/client-ssm": "^3.48.0",
+    "@aws-sdk/client-sts": "^3.180.0",
+    "aws-sdk": "^2.1225.0",
+    "cdk-assets": "^2.43.1",
     "fast-json-patch": "^3.1.0",
     "immutable": "^4.0.0"
   },

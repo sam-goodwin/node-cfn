@@ -113,6 +113,18 @@
       "type": "runtime"
     },
     {
+      "name": "@aws-sdk/client-sts",
+      "type": "runtime"
+    },
+    {
+      "name": "aws-sdk",
+      "type": "runtime"
+    },
+    {
+      "name": "cdk-assets",
+      "type": "runtime"
+    },
+    {
       "name": "fast-json-patch",
       "type": "runtime"
     },
