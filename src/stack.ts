@@ -686,6 +686,7 @@ export class Stack {
               ...(roles ?? []),
             ]);
 
+            // add a max of 10 second padding after adding any policy
             state.tasks["PolicyPadding"] = wait(10000) as any;
 
             return {
@@ -902,9 +903,11 @@ export class Stack {
               ...detachRoles,
               ...attachUser,
               ...detachUsers,
-              // it can take a while for a policy to propagate, give it some time
-              wait(10000),
             ]);
+
+            // add a max of 10 second padding after adding any managed policy
+            state.tasks["ManagedPolicyPadding"] = wait(10000) as any;
+
             const failedAttaches = attachResults.filter(
               (a): a is PromiseRejectedResult => a.status === "rejected"
             );
