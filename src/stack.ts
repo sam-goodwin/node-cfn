@@ -86,6 +86,18 @@ export interface StackState {
   outputs: Record<string, string>;
 }
 
+export interface Module {
+  // the process which when complete, evaluates the resource
+  resource: Promise<PhysicalResource | undefined>;
+  operation?: "UPDATE" | "CREATE" | "DELETE";
+  processTime?: number;
+  start?: Date;
+  end?: Date;
+  dependencies: string[];
+  type?: string;
+  name: string;
+}
+
 export interface UpdateState {
   /**
    * The previous {@link CloudFormationTemplate} which triggered the `Update`.
@@ -114,8 +126,8 @@ export interface UpdateState {
   /**
    * Map of `logicalId` to a task ({@link Promise}) resolving the new state of the {@link PhysicalResource}.
    */
-  tasks: {
-    [logicalId: string]: Promise<PhysicalResource | undefined>;
+  modules: {
+    [logicalId: string]: Module;
   };
 }
 
@@ -262,7 +274,7 @@ export class Stack {
       previousDependencyGraph: buildDependencyGraph(this.state.template),
       desiredState: undefined,
       desiredDependencyGraph: undefined,
-      tasks: {}, // initialize with empty state
+      modules: {}, // initialize with empty state
     };
 
     // delete all resources in the stack
@@ -280,14 +292,73 @@ export class Stack {
    */
   private async deleteResources(logicalIds: string[], state: UpdateState) {
     const allowedLogicalIds = new Set(logicalIds);
-    return logicalIds.map((logicalId) => {
-      console.log("Add DELETE: " + logicalId);
-      state.tasks[logicalId] = this.deleteResource(
-        logicalId,
-        state,
-        allowedLogicalIds
-      );
-    });
+    return logicalIds.map((logicalId) =>
+      this.deleteResource(logicalId, state, allowedLogicalIds)
+    );
+  }
+
+  private startProcessModule(
+    logicalId: string,
+    operation: "UPDATE" | "CREATE" | "DELETE" | undefined,
+    state: UpdateState,
+    type: string | undefined,
+    operationTask: (start: Date) => Promise<{
+      processTime: number;
+      resource: PhysicalResource | undefined;
+    }>
+  ): Module {
+    if (state.modules[logicalId]) {
+      throw new Error("LogcalId started with two operations.");
+    } else {
+      const start = new Date();
+      return (state.modules[logicalId] = {
+        start: start,
+        resource: operationTask(start).then((x) => {
+          state.modules[logicalId] = {
+            ...state.modules[logicalId],
+            end: new Date(),
+            processTime: x.processTime,
+          };
+          return x.resource;
+        }),
+        dependencies: [],
+        operation,
+        type,
+        name: logicalId,
+      });
+    }
+  }
+
+  /**
+   * Padding module is used to delay the completion of the deployment until after X time
+   * after a resource which may not be complete.
+   *
+   * Each call to this function will force the deployment to end at LEAST {@link paddingMillis}
+   * from this point in time.
+   *
+   * If the current padding is longer than the added padding, nothing will change, if the current padding is shorter, the process will
+   * end at least {@link paddingMillis} from this point in time.
+   */
+  private addModulePadding(
+    paddingMillis: number,
+    state: UpdateState,
+    name: string = "PADDING"
+  ) {
+    if (state.modules[name]) {
+      state.modules[name] = {
+        ...state.modules[name],
+        resource: Promise.all([
+          state.modules[name].resource,
+          wait(paddingMillis),
+        ]) as any,
+      };
+    } else {
+      state.modules[name] = {
+        dependencies: [],
+        resource: wait(paddingMillis) as any,
+        name,
+      };
+    }
   }
 
   /**
@@ -305,83 +376,99 @@ export class Stack {
     state: UpdateState,
     allowedLogicalIds: Set<String>
   ): Promise<PhysicalResource | undefined> {
-    if (logicalId in state.tasks) {
-      return state.tasks[logicalId];
-    }
+    if (logicalId in state.modules) {
+      return state.modules[logicalId].resource;
+    } else {
+      const process = async () => {
+        const physicalResource = this.getPhysicalResource(logicalId);
+        const logicalResource = this.getLogicalResource(logicalId, state);
 
-    const physicalResource = this.getPhysicalResource(logicalId);
-    const logicalResource = this.getLogicalResource(logicalId, state);
-
-    if (physicalResource === undefined || logicalResource === undefined) {
-      // TODO: should we error here or continue optimistically?
-      throw new Error(`Resource does not exist: '${logicalId}'`);
-    }
-
-    const deletionPolicy = logicalResource.DeletionPolicy;
-    if (
-      deletionPolicy === DeletionPolicy.Snapshot ||
-      (deletionPolicy === undefined &&
-        (physicalResource.Type === "AWS::RDS::DBCluster" ||
-          (physicalResource.Type === "AWS::RDS::DBInstance" &&
-            logicalResource.Properties?.DBClusterIdentifier === undefined)))
-    ) {
-      // RDS defaults to Snapshot in certain conditions, so we detect them and error here
-      // since we don't yet support DeletionPolicy.Snapshot
-      throw new Error(`DeletionPolicy.Snapshot is not yet supported`);
-    }
-
-    if (
-      deletionPolicy === undefined ||
-      deletionPolicy === DeletionPolicy.Delete
-    ) {
-      const dependencies = state.previousDependencyGraph?.[logicalId];
-
-      if (dependencies === undefined) {
-        throw new Error(`undefined dependencies`);
-      }
-
-      // wait for dependencies to delete before deleting this resource
-      await Promise.all(
-        dependencies.map((dependency) =>
-          this.deleteResource(dependency, state, allowedLogicalIds)
-        )
-      );
-
-      if (allowedLogicalIds?.has(logicalId) ?? true) {
-        // if this logicalId is allowed to be deleted, then delete it
-        // nite: we always transit dependencies BEFORE any other action is taken
-        const progress = (
-          await awsSDKRetry(() =>
-            this.controlClient.send(
-              new control.DeleteResourceCommand({
-                TypeName: physicalResource.Type,
-                Identifier: physicalResource.PhysicalId,
-              })
-            )
-          )
-        ).ProgressEvent;
-
-        if (progress === undefined) {
-          throw new Error(
-            `DeleteResourceCommand returned an unefined ProgressEvent`
-          );
+        if (physicalResource === undefined || logicalResource === undefined) {
+          // TODO: should we error here or continue optimistically?
+          throw new Error(`Resource does not exist: '${logicalId}'`);
         }
 
-        return this.waitForProgress(
-          logicalId,
-          physicalResource.Type,
-          physicalResource.InputProperties,
-          progress
-        );
-      } else {
-        // we're not allowed to delete it, so skip
-        return physicalResource;
-      }
-    } else if (deletionPolicy === DeletionPolicy.Retain) {
-      return physicalResource;
-    } else {
-      // should never reach here
-      throw new Error(`Unsupported: DeletionPolicy.${deletionPolicy}`);
+        const deletionPolicy = logicalResource.DeletionPolicy;
+        if (
+          deletionPolicy === DeletionPolicy.Snapshot ||
+          (deletionPolicy === undefined &&
+            (physicalResource.Type === "AWS::RDS::DBCluster" ||
+              (physicalResource.Type === "AWS::RDS::DBInstance" &&
+                logicalResource.Properties?.DBClusterIdentifier === undefined)))
+        ) {
+          // RDS defaults to Snapshot in certain conditions, so we detect them and error here
+          // since we don't yet support DeletionPolicy.Snapshot
+          throw new Error(`DeletionPolicy.Snapshot is not yet supported`);
+        }
+
+        if (
+          deletionPolicy === undefined ||
+          deletionPolicy === DeletionPolicy.Delete
+        ) {
+          const dependencies = state.previousDependencyGraph?.[logicalId];
+
+          if (dependencies === undefined) {
+            throw new Error(`undefined dependencies`);
+          }
+
+          // wait for dependencies to delete before deleting this resource
+          await Promise.all(
+            dependencies.map((dependency) =>
+              this.deleteResource(dependency, state, allowedLogicalIds)
+            )
+          );
+
+          if (allowedLogicalIds?.has(logicalId) ?? true) {
+            // if this logicalId is allowed to be deleted, then delete it
+            // nite: we always transit dependencies BEFORE any other action is taken
+            const progress = (
+              await awsSDKRetry(() =>
+                this.controlClient.send(
+                  new control.DeleteResourceCommand({
+                    TypeName: physicalResource.Type,
+                    Identifier: physicalResource.PhysicalId,
+                  })
+                )
+              )
+            ).ProgressEvent;
+
+            if (progress === undefined) {
+              throw new Error(
+                `DeleteResourceCommand returned an unefined ProgressEvent`
+              );
+            }
+
+            return this.waitForProgress(
+              logicalId,
+              physicalResource.Type,
+              physicalResource.InputProperties,
+              progress
+            );
+          } else {
+            // we're not allowed to delete it, so skip
+            return physicalResource;
+          }
+        } else if (deletionPolicy === DeletionPolicy.Retain) {
+          return physicalResource;
+        } else {
+          // should never reach here
+          throw new Error(`Unsupported: DeletionPolicy.${deletionPolicy}`);
+        }
+      };
+
+      return this.startProcessModule(
+        logicalId,
+        "DELETE",
+        state,
+        state.desiredState?.Resources[logicalId].Type,
+        async (start) => {
+          console.log("Add DELETE: " + logicalId);
+          return {
+            resource: await process(),
+            processTime: new Date().getTime() - start.getTime(),
+          };
+        }
+      ).resource;
     }
   }
 
@@ -434,7 +521,7 @@ export class Stack {
       desiredState: desiredState,
       desiredDependencyGraph: buildDependencyGraph(desiredState),
       parameterValues,
-      tasks: {},
+      modules: {},
     };
     try {
       await this.validateParameters(desiredState, parameterValues);
@@ -490,15 +577,15 @@ export class Stack {
         ),
       };
 
-      // delete orhpanned resources
-      const orhpannedLogicalIds =
+      // delete orphaned resources
+      const orphanedLogicalIds =
         previousState === undefined
           ? []
           : discoverOrphanedDependencies(previousState, desiredState);
 
-      await this.deleteResources(orhpannedLogicalIds, state);
+      await this.deleteResources(orphanedLogicalIds, state);
 
-      for (const orphanedLogicalId of orhpannedLogicalIds) {
+      for (const orphanedLogicalId of orphanedLogicalIds) {
         delete this.state?.resources[orphanedLogicalId];
       }
 
@@ -506,19 +593,81 @@ export class Stack {
     } finally {
       console.log("Cleaning Up");
 
-      console.log(Object.keys(state.tasks).length, Object.keys(state.tasks));
+      console.log(
+        Object.keys(state.modules).length,
+        Object.keys(state.modules)
+      );
 
       // await any leaf tasks not awaited already
-      (await Promise.allSettled(Object.values(state.tasks)))
+      const completedModules = await Promise.allSettled(
+        Object.values(state.modules).map(async (x) => ({
+          resource: await x.resource,
+          module: x,
+        }))
+      );
+
+      const failedMessage = completedModules
         .filter((r): r is PromiseRejectedResult => r.status === "rejected")
-        .forEach((r) => console.log("Resource failed: " + r.reason));
+        .map((r) => "Resource failed: " + r.reason)
+        .join("\n");
+      const succeededModules = completedModules.filter(
+        (
+          r
+        ): r is Exclude<
+          typeof completedModules[number],
+          PromiseRejectedResult
+        > => r.status === "fulfilled"
+      );
+      const succeededMessage = succeededModules
+        .map((r) => {
+          // TODO: output in a consumable form
+          return `Resource complete: ${r.value.module.name} - (${
+            r.value.module.type
+          }) - T: ${
+            r.value.module.end && r.value.module.start
+              ? r.value.module.end.getTime() - r.value.module.start.getTime()
+              : "NA"
+          } P: ${r.value.module.processTime ?? "NA"}`;
+        })
+        .join("\n");
+      const typeMetrics = succeededModules.reduce(
+        (metrics: Record<string, { avgProcessTime: number; n: number }>, m) => {
+          const processTime = m.value.module.processTime;
+          const type = m.value.module.type;
+          if (!type || !processTime) {
+            return metrics;
+          }
+          const record = metrics[type] ?? { avgProcessTime: 0, n: 0 };
+          return {
+            ...metrics,
+            [type]: {
+              avgProcessTime:
+                (record.avgProcessTime * record.n + processTime) /
+                (record.n + 1),
+              n: record.n + 1,
+            },
+          };
+        },
+        {}
+      );
+      const metricsMessage = Object.entries(typeMetrics)
+        .map(
+          (metric) =>
+            `${metric[0]} - P: ${metric[1].avgProcessTime} N: ${metric[1].n}`
+        )
+        .join("\n");
 
-      console.log(Object.keys(state.tasks).length, Object.keys(state.tasks));
+      console.log(`SUCCEEDED:
+${succeededMessage}
 
-      // TODO: tasks can add more tasks, this may not be the end, need to resolve until empty
+FAILURES:
+${failedMessage}
+
+AGGREGATED METRICS:
+${metricsMessage}`);
 
       // clear tasks
-      state.tasks = {};
+      state.modules = {};
     }
   }
 
@@ -538,511 +687,550 @@ export class Stack {
     logicalId: string
   ): Promise<PhysicalResource | undefined> {
     const logicalResource = this.getLogicalResource(logicalId, state);
-    if (logicalId in state.tasks) {
+    if (logicalId in state.modules) {
       console.log("Task Cache Hit: " + logicalId);
-      return state.tasks[logicalId];
+      return state.modules[logicalId].resource;
     } else {
       console.log("Add UPDATE: " + logicalId);
-      return (state.tasks[logicalId] = (async () => {
-        if (logicalResource.Condition) {
-          const conditionRule =
-            state.desiredState?.Conditions?.[logicalResource.Condition];
-          if (conditionRule === undefined) {
-            throw new Error(
-              `Condition '${logicalResource.Condition}' does not exist`
+      const physicalResource = this.getPhysicalResource(logicalId);
+      const update = physicalResource !== undefined;
+
+      return this.startProcessModule(
+        logicalId,
+        update ? "UPDATE" : "CREATE",
+        state,
+        state.desiredState?.Resources[logicalId].Type,
+        async () => {
+          if (logicalResource.Condition) {
+            const conditionRule =
+              state.desiredState?.Conditions?.[logicalResource.Condition];
+            if (conditionRule === undefined) {
+              throw new Error(
+                `Condition '${logicalResource.Condition}' does not exist`
+              );
+            }
+            const shouldCreate = await this.evaluateRuleExpressionToBoolean(
+              conditionRule,
+              state
             );
+            if (!shouldCreate) {
+              return { resource: undefined, processTime: 0 };
+            }
           }
-          const shouldCreate = await this.evaluateRuleExpressionToBoolean(
-            conditionRule,
-            state
-          );
-          if (!shouldCreate) {
-            return undefined;
-          }
-        }
 
-        const properties = logicalResource.Properties
-          ? Object.fromEntries(
-              await Promise.all(
-                Object.entries(logicalResource.Properties).map(
-                  async ([propName, propExpr]) => [
-                    propName,
-                    await this.evaluateExpr(propExpr, state),
-                  ]
-                )
-              )
-            )
-          : {};
-
-        if (logicalResource.DependsOn) {
-          const results = await Promise.allSettled(
-            logicalResource.DependsOn.map((logicalDep) =>
-              this.updateResource(state, logicalDep)
-            )
-          );
-          const failed = results.filter((s) => s.status === "rejected");
-          if (failed.length > 0) {
-            throw new Error(`Dependency of ${logicalId} failed, aborting.`);
-          }
-        }
-
-        const physicalResource = this.getPhysicalResource(logicalId);
-        const update = physicalResource !== undefined;
-        try {
-          if (logicalResource.Type === "AWS::Events::EventBus") {
-            let result: { arn: string };
-            try {
-              const r = await awsSDKRetry(() =>
-                this.eventBridgeClient.send(
-                  new events.CreateEventBusCommand(
-                    properties as unknown as events.CreateEventBusCommandInput
+          const properties = logicalResource.Properties
+            ? Object.fromEntries(
+                await Promise.all(
+                  Object.entries(logicalResource.Properties).map(
+                    async ([propName, propExpr]) => [
+                      propName,
+                      await this.evaluateExpr(propExpr, state),
+                    ]
                   )
                 )
-              );
-              if (!r.EventBusArn) {
-                throw new Error("Expected event arn");
-              }
-              result = {
-                arn: r.EventBusArn,
-              };
-            } catch (err) {
-              // TODO: support updates.
-              if (err instanceof events.ResourceAlreadyExistsException) {
-                result = {
-                  arn: `arn:aws:events:${this.region}:${this.account}:event-bus/${properties.Name}`,
-                };
-              } else {
-                throw err;
-              }
+              )
+            : {};
+
+          if (logicalResource.DependsOn) {
+            const results = await Promise.allSettled(
+              logicalResource.DependsOn.map((logicalDep) =>
+                this.updateResource(state, logicalDep)
+              )
+            );
+            const failed = results.filter((s) => s.status === "rejected");
+            if (failed.length > 0) {
+              throw new Error(`Dependency of ${logicalId} failed, aborting.`);
             }
-            return {
-              PhysicalId: result.arn,
-              Attributes: {
-                Arn: result.arn,
-              },
-              InputProperties: properties,
-              Type: logicalResource.Type,
-            };
-          } else if (logicalResource.Type === "AWS::Events::Rule") {
-            const props = properties as unknown as EventBusRuleResource;
-            const input = {
-              Name: logicalId,
-              ...props,
-              EventPattern: JSON.stringify(props.EventPattern),
-            };
-            const r = await this.eventBridgeClient.send(
-              new events.PutRuleCommand(input)
-            );
+          }
 
-            if (!r.RuleArn) {
-              throw new Error("Expected rule arn");
-            }
-            return {
-              PhysicalId: r.RuleArn!,
-              InputProperties: properties as unknown as PhysicalProperties,
-              Type: logicalResource.Type,
-              Attributes: { Arn: r.RuleArn!, Id: input.Name },
-            };
-          } else if (logicalResource.Type === "AWS::IAM::Policy") {
-            const props = properties as PolicyResource;
-            const policyDocument = JSON.stringify(props.PolicyDocument);
-            const roles = props.Roles?.map((r) =>
-              awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.PutRolePolicyCommand({
-                    PolicyDocument: policyDocument,
-                    PolicyName: props.PolicyName,
-                    RoleName: r,
-                  })
-                )
-              )
-            );
-            const groups = props.Groups?.map((g) =>
-              awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.PutGroupPolicyCommand({
-                    PolicyDocument: policyDocument,
-                    PolicyName: props.PolicyName,
-                    GroupName: g,
-                  })
-                )
-              )
-            );
-            const users = props.Users?.map((u) =>
-              awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.PutUserPolicyCommand({
-                    PolicyDocument: policyDocument,
-                    PolicyName: props.PolicyName,
-                    UserName: u,
-                  })
-                )
-              )
-            );
+          const startTime = new Date();
 
-            await Promise.all([
-              ...(groups ?? []),
-              ...(users ?? []),
-              ...(roles ?? []),
-            ]);
-
-            // add a max of 10 second padding after adding any policy
-            state.tasks["PolicyPadding"] = wait(10000) as any;
-
-            return {
-              PhysicalId: undefined,
-              Attributes: {},
-              InputProperties: properties,
-              Type: logicalResource.Type,
-            };
-          } else if (logicalResource.Type === "AWS::IAM::ManagedPolicy") {
-            const props = properties as ManagedPolicyResource;
-            // create the role
-            let result: {
-              arn: string;
-              groups: string[];
-              roles: string[];
-              users: string[];
-            };
-            try {
-              const r = await awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.CreatePolicyCommand({
-                    PolicyDocument: JSON.stringify(props.PolicyDocument),
-                    // fix name
-                    PolicyName: props.ManagedPolicyName ?? logicalId,
-                    Description: props.Description,
-                    Path: props.Path,
-                  })
-                )
-              );
-              if (!r.Policy || !r.Policy.Arn) {
-                throw new Error("Expected policy");
-              }
-              result = {
-                arn: r.Policy.Arn,
-                groups: [],
-                roles: [],
-                users: [],
-              };
-            } catch (err) {
-              let _err = err as { name: string };
-              // if the entity exists, just provide the arn and move on.
-              // TODO: check if the role attachments need to change.
-              if (_err.name === "EntityAlreadyExists") {
-                // todoL managed policy name must be more unique
-                const name = props.ManagedPolicyName ?? logicalId;
-
-                const arn = `arn:aws:iam::${this.account}:policy/${name}`;
-                let entities: Pick<
-                  iam.ListEntitiesForPolicyCommandOutput,
-                  "PolicyGroups" | "PolicyRoles" | "PolicyUsers"
-                > = {};
-                let response: iam.ListEntitiesForPolicyCommandOutput = {
-                  IsTruncated: true,
-                  $metadata: {},
-                };
-                const versions = await awsSDKRetry(() =>
-                  this.iamClient.send(
-                    new iam.ListPolicyVersionsCommand({ PolicyArn: arn })
+          try {
+            if (logicalResource.Type === "AWS::Events::EventBus") {
+              let result: { arn: string };
+              try {
+                const r = await awsSDKRetry(() =>
+                  this.eventBridgeClient.send(
+                    new events.CreateEventBusCommand(
+                      properties as unknown as events.CreateEventBusCommandInput
+                    )
                   )
                 );
-                // prune
-                if (versions.Versions && versions.Versions.length >= 5) {
-                  const nonDefaultVersions = versions.Versions.filter(
-                    (v) => !v.IsDefaultVersion
-                  );
-                  const oldestDate = Math.min(
-                    ...nonDefaultVersions.map(
-                      (v) => v.CreateDate?.getTime() ?? Number.MAX_SAFE_INTEGER
+                if (!r.EventBusArn) {
+                  throw new Error("Expected event arn");
+                }
+                result = {
+                  arn: r.EventBusArn,
+                };
+              } catch (err) {
+                // TODO: support updates.
+                if (err instanceof events.ResourceAlreadyExistsException) {
+                  result = {
+                    arn: `arn:aws:events:${this.region}:${this.account}:event-bus/${properties.Name}`,
+                  };
+                } else {
+                  throw err;
+                }
+              }
+              return {
+                resource: {
+                  PhysicalId: result.arn,
+                  Attributes: {
+                    Arn: result.arn,
+                  },
+                  InputProperties: properties,
+                  Type: logicalResource.Type,
+                },
+                processTime: new Date().getTime() - startTime.getTime(),
+              };
+            } else if (logicalResource.Type === "AWS::Events::Rule") {
+              const props = properties as unknown as EventBusRuleResource;
+              const input = {
+                Name: logicalId,
+                ...props,
+                EventPattern: JSON.stringify(props.EventPattern),
+              };
+              const r = await this.eventBridgeClient.send(
+                new events.PutRuleCommand(input)
+              );
+
+              if (!r.RuleArn) {
+                throw new Error("Expected rule arn");
+              }
+              return {
+                resource: {
+                  PhysicalId: r.RuleArn!,
+                  InputProperties: properties as unknown as PhysicalProperties,
+                  Type: logicalResource.Type,
+                  Attributes: { Arn: r.RuleArn!, Id: input.Name },
+                },
+                processTime: new Date().getTime() - startTime.getTime(),
+              };
+            } else if (logicalResource.Type === "AWS::IAM::Policy") {
+              const props = properties as PolicyResource;
+              const policyDocument = JSON.stringify(props.PolicyDocument);
+              const roles = props.Roles?.map((r) =>
+                awsSDKRetry(() =>
+                  this.iamClient.send(
+                    new iam.PutRolePolicyCommand({
+                      PolicyDocument: policyDocument,
+                      PolicyName: props.PolicyName,
+                      RoleName: r,
+                    })
+                  )
+                )
+              );
+              const groups = props.Groups?.map((g) =>
+                awsSDKRetry(() =>
+                  this.iamClient.send(
+                    new iam.PutGroupPolicyCommand({
+                      PolicyDocument: policyDocument,
+                      PolicyName: props.PolicyName,
+                      GroupName: g,
+                    })
+                  )
+                )
+              );
+              const users = props.Users?.map((u) =>
+                awsSDKRetry(() =>
+                  this.iamClient.send(
+                    new iam.PutUserPolicyCommand({
+                      PolicyDocument: policyDocument,
+                      PolicyName: props.PolicyName,
+                      UserName: u,
+                    })
+                  )
+                )
+              );
+
+              await Promise.all([
+                ...(groups ?? []),
+                ...(users ?? []),
+                ...(roles ?? []),
+              ]);
+
+              // add a max of 10 second padding after adding any policy
+              this.addModulePadding(10000, state);
+
+              return {
+                resource: {
+                  PhysicalId: undefined,
+                  Attributes: {},
+                  InputProperties: properties,
+                  Type: logicalResource.Type,
+                },
+                processTime: new Date().getTime() - startTime.getTime(),
+              };
+            } else if (logicalResource.Type === "AWS::IAM::ManagedPolicy") {
+              const props = properties as ManagedPolicyResource;
+              // create the role
+              let result: {
+                arn: string;
+                groups: string[];
+                roles: string[];
+                users: string[];
+              };
+              try {
+                const r = await awsSDKRetry(() =>
+                  this.iamClient.send(
+                    new iam.CreatePolicyCommand({
+                      PolicyDocument: JSON.stringify(props.PolicyDocument),
+                      // fix name
+                      PolicyName: props.ManagedPolicyName ?? logicalId,
+                      Description: props.Description,
+                      Path: props.Path,
+                    })
+                  )
+                );
+                if (!r.Policy || !r.Policy.Arn) {
+                  throw new Error("Expected policy");
+                }
+                iam.waitUntilPolicyExists(
+                  { client: this.iamClient, maxWaitTime: 10 },
+                  { PolicyArn: r.Policy.Arn }
+                );
+                result = {
+                  arn: r.Policy.Arn,
+                  groups: [],
+                  roles: [],
+                  users: [],
+                };
+              } catch (err) {
+                let _err = err as { name: string };
+                // if the entity exists, just provide the arn and move on.
+                // TODO: check if the role attachments need to change.
+                if (_err.name === "EntityAlreadyExists") {
+                  // todoL managed policy name must be more unique
+                  const name = props.ManagedPolicyName ?? logicalId;
+
+                  const arn = `arn:aws:iam::${this.account}:policy/${name}`;
+                  let entities: Pick<
+                    iam.ListEntitiesForPolicyCommandOutput,
+                    "PolicyGroups" | "PolicyRoles" | "PolicyUsers"
+                  > = {};
+                  let response: iam.ListEntitiesForPolicyCommandOutput = {
+                    IsTruncated: true,
+                    $metadata: {},
+                  };
+                  const versions = await awsSDKRetry(() =>
+                    this.iamClient.send(
+                      new iam.ListPolicyVersionsCommand({ PolicyArn: arn })
                     )
                   );
-                  const oldest = nonDefaultVersions.find(
-                    (v) => v.CreateDate?.getTime() === oldestDate
-                  )!;
+                  // prune
+                  if (versions.Versions && versions.Versions.length >= 5) {
+                    const nonDefaultVersions = versions.Versions.filter(
+                      (v) => !v.IsDefaultVersion
+                    );
+                    const oldestDate = Math.min(
+                      ...nonDefaultVersions.map(
+                        (v) =>
+                          v.CreateDate?.getTime() ?? Number.MAX_SAFE_INTEGER
+                      )
+                    );
+                    const oldest = nonDefaultVersions.find(
+                      (v) => v.CreateDate?.getTime() === oldestDate
+                    )!;
+                    await awsSDKRetry(() =>
+                      this.iamClient.send(
+                        new iam.DeletePolicyVersionCommand({
+                          PolicyArn: arn,
+                          VersionId: oldest.VersionId,
+                        })
+                      )
+                    );
+                  }
                   await awsSDKRetry(() =>
                     this.iamClient.send(
-                      new iam.DeletePolicyVersionCommand({
+                      new iam.CreatePolicyVersionCommand({
                         PolicyArn: arn,
-                        VersionId: oldest.VersionId,
+                        PolicyDocument: JSON.stringify(props.PolicyDocument),
+                        SetAsDefault: true,
                       })
                     )
                   );
+                  while (response.IsTruncated) {
+                    response = await awsSDKRetry(() =>
+                      this.iamClient.send(
+                        new iam.ListEntitiesForPolicyCommand({ PolicyArn: arn })
+                      )
+                    );
+                    entities = {
+                      PolicyGroups: [
+                        ...(entities.PolicyGroups ?? []),
+                        ...(response.PolicyGroups ?? []),
+                      ],
+                      PolicyRoles: [
+                        ...(entities.PolicyRoles ?? []),
+                        ...(response.PolicyRoles ?? []),
+                      ],
+                      PolicyUsers: [
+                        ...(entities.PolicyUsers ?? []),
+                        ...(response.PolicyUsers ?? []),
+                      ],
+                    };
+                  }
+
+                  result = {
+                    arn,
+                    groups: (entities.PolicyGroups ?? [])
+                      .map((g) => g.GroupName)
+                      .filter((g): g is string => !!g),
+                    roles: (entities.PolicyRoles ?? [])
+                      .map((r) => r.RoleName)
+                      .filter((r): r is string => !!r),
+                    users: (entities.PolicyUsers ?? [])
+                      .map((u) => u.UserName)
+                      .filter((u): u is string => !!u),
+                  };
+                } else {
+                  throw err;
                 }
-                await awsSDKRetry(() =>
+              }
+              const addGroups = (props.Groups ?? []).filter(
+                (g) => !result.groups.includes(g)
+              );
+              // then attach the groups and roles and users
+              const attachGroups = addGroups.map((group) =>
+                awsSDKRetry(() =>
                   this.iamClient.send(
-                    new iam.CreatePolicyVersionCommand({
-                      PolicyArn: arn,
-                      PolicyDocument: JSON.stringify(props.PolicyDocument),
-                      SetAsDefault: true,
+                    new iam.AttachGroupPolicyCommand({
+                      GroupName: group,
+                      PolicyArn: result.arn,
                     })
                   )
+                )
+              );
+              const removeGroups = props.Groups
+                ? result.groups.filter((g) => !props.Groups!.includes(g))
+                : [];
+              const detachGroups = removeGroups.map((g) =>
+                awsSDKRetry(() =>
+                  this.iamClient.send(
+                    new iam.DetachGroupPolicyCommand({
+                      GroupName: g,
+                      PolicyArn: result.arn,
+                    })
+                  )
+                )
+              );
+              const addRoles = (props.Roles ?? []).filter(
+                (r) => !result.roles.includes(r)
+              );
+              const attachRoles = addRoles.map((role) =>
+                awsSDKRetry(() =>
+                  this.iamClient.send(
+                    new iam.AttachRolePolicyCommand({
+                      RoleName: role,
+                      PolicyArn: result.arn,
+                    })
+                  )
+                )
+              );
+              const removeRoles = props.Roles
+                ? result.roles.filter((r) => !props.Roles!.includes(r))
+                : [];
+              const detachRoles = removeRoles.map((r) =>
+                awsSDKRetry(() =>
+                  this.iamClient.send(
+                    new iam.DetachRolePolicyCommand({
+                      RoleName: r,
+                      PolicyArn: result.arn,
+                    })
+                  )
+                )
+              );
+              const addUsers = (props.Users ?? []).filter(
+                (r) => !result.users.includes(r)
+              );
+              const attachUser = addUsers.map((user) =>
+                awsSDKRetry(() =>
+                  this.iamClient.send(
+                    new iam.AttachUserPolicyCommand({
+                      UserName: user,
+                      PolicyArn: result.arn,
+                    })
+                  )
+                )
+              );
+              const removeUsers = props.Users
+                ? result.users.filter((u) => !props.Users!.includes(u))
+                : [];
+              const detachUsers = removeUsers.map((u) =>
+                awsSDKRetry(() =>
+                  this.iamClient.send(
+                    new iam.DetachUserPolicyCommand({
+                      UserName: u,
+                      PolicyArn: result.arn,
+                    })
+                  )
+                )
+              );
+
+              const attachResults = await Promise.allSettled([
+                ...attachGroups,
+                ...detachGroups,
+                ...attachRoles,
+                ...detachRoles,
+                ...attachUser,
+                ...detachUsers,
+              ]);
+
+              // add a max of 10 second padding after adding any managed policy
+              this.addModulePadding(10000, state);
+
+              const failedAttaches = attachResults.filter(
+                (a): a is PromiseRejectedResult => a.status === "rejected"
+              );
+              if (failedAttaches.length > 1) {
+                throw new Error(
+                  `Attaching or detaching roles, groups, or users of a Policy failed: ${failedAttaches
+                    .map((a) => a.reason)
+                    .join("\n")}`
                 );
-                while (response.IsTruncated) {
-                  response = await awsSDKRetry(() =>
-                    this.iamClient.send(
-                      new iam.ListEntitiesForPolicyCommand({ PolicyArn: arn })
+              }
+
+              return {
+                resource: {
+                  PhysicalId: result.arn,
+                  Type: logicalResource.Type,
+                  InputProperties: properties,
+                  Attributes: {
+                    Arn: result.arn,
+                  },
+                },
+                processTime: new Date().getTime() - startTime.getTime(),
+              };
+            } else if (logicalResource.Type === "AWS::SQS::QueuePolicy") {
+              const props = properties as unknown as SQSQueuePolicyResource;
+
+              const result = await Promise.allSettled(
+                props.Queues.map((q) =>
+                  this.sqsClient.send(
+                    new sqs.SetQueueAttributesCommand({
+                      Attributes: {
+                        Policy: JSON.stringify(props.PolicyDocument),
+                      },
+                      QueueUrl: q,
+                    })
+                  )
+                )
+              );
+              const failures = result.filter(
+                (x): x is PromiseRejectedResult => x.status === "rejected"
+              );
+              if (failures.length > 0) {
+                throw new Error(
+                  `Queue Policy failed to update (${logicalId}): ${failures
+                    .map((f) => f.reason)
+                    .join("\n")}`
+                );
+              }
+              return {
+                resource: {
+                  PhysicalId: undefined,
+                  Attributes: {},
+                  Type: logicalResource.Type,
+                  InputProperties: props as unknown as PhysicalProperties,
+                },
+                processTime: new Date().getTime() - startTime.getTime(),
+              };
+            } else {
+              let controlApiResult;
+              if (!update) {
+                console.log(`Creating ${logicalId} (${logicalResource.Type})`);
+                const props = (() => {
+                  if (logicalResource.Type === "AWS::DynamoDB::Table") {
+                    // dynamo table pay_per_request fails when ProvisionedThroughput is present.
+                    if (properties.BillingMode === "PAY_PER_REQUEST ") {
+                      const { ProvisionedThroughput, ...props } = properties;
+                      return props;
+                    }
+                  }
+                  return properties;
+                })();
+                try {
+                  console.log(
+                    `Starting Create for ${logicalResource.Type}: ${logicalId}`
+                  );
+                  controlApiResult = await awsSDKRetry(() =>
+                    this.controlClient.send(
+                      new control.CreateResourceCommand({
+                        TypeName: logicalResource.Type,
+                        DesiredState: JSON.stringify(props),
+                      })
                     )
                   );
-                  entities = {
-                    PolicyGroups: [
-                      ...(entities.PolicyGroups ?? []),
-                      ...(response.PolicyGroups ?? []),
-                    ],
-                    PolicyRoles: [
-                      ...(entities.PolicyRoles ?? []),
-                      ...(response.PolicyRoles ?? []),
-                    ],
-                    PolicyUsers: [
-                      ...(entities.PolicyUsers ?? []),
-                      ...(response.PolicyUsers ?? []),
-                    ],
+                } catch (err) {
+                  console.error(
+                    `error while deploying (${
+                      (<any>err).message
+                    }) ${JSON.stringify(
+                      logicalResource,
+                      null,
+                      2
+                    )} with props ${JSON.stringify(props, null, 2)}`
+                  );
+                  throw err;
+                }
+              } else {
+                const patch = compare(
+                  physicalResource.InputProperties,
+                  properties
+                );
+                if (patch.length === 0) {
+                  console.log(
+                    `Skipping Update of ${logicalId} (${logicalResource.Type})`
+                  );
+                  return {
+                    resource: physicalResource,
+                    processTime: new Date().getTime() - startTime.getTime(),
                   };
                 }
-
-                result = {
-                  arn,
-                  groups: (entities.PolicyGroups ?? [])
-                    .map((g) => g.GroupName)
-                    .filter((g): g is string => !!g),
-                  roles: (entities.PolicyRoles ?? [])
-                    .map((r) => r.RoleName)
-                    .filter((r): r is string => !!r),
-                  users: (entities.PolicyUsers ?? [])
-                    .map((u) => u.UserName)
-                    .filter((u): u is string => !!u),
-                };
-              } else {
-                throw err;
-              }
-            }
-            const addGroups = (props.Groups ?? []).filter(
-              (g) => !result.groups.includes(g)
-            );
-            // then attach the groups and roles and users
-            const attachGroups = addGroups.map((group) =>
-              awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.AttachGroupPolicyCommand({
-                    GroupName: group,
-                    PolicyArn: result.arn,
-                  })
-                )
-              )
-            );
-            const removeGroups = props.Groups
-              ? result.groups.filter((g) => !props.Groups!.includes(g))
-              : [];
-            const detachGroups = removeGroups.map((g) =>
-              awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.DetachGroupPolicyCommand({
-                    GroupName: g,
-                    PolicyArn: result.arn,
-                  })
-                )
-              )
-            );
-            const addRoles = (props.Roles ?? []).filter(
-              (r) => !result.roles.includes(r)
-            );
-            const attachRoles = addRoles.map((role) =>
-              awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.AttachRolePolicyCommand({
-                    RoleName: role,
-                    PolicyArn: result.arn,
-                  })
-                )
-              )
-            );
-            const removeRoles = props.Roles
-              ? result.roles.filter((r) => !props.Roles!.includes(r))
-              : [];
-            const detachRoles = removeRoles.map((r) =>
-              awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.DetachRolePolicyCommand({
-                    RoleName: r,
-                    PolicyArn: result.arn,
-                  })
-                )
-              )
-            );
-            const addUsers = (props.Users ?? []).filter(
-              (r) => !result.users.includes(r)
-            );
-            const attachUser = addUsers.map((user) =>
-              awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.AttachUserPolicyCommand({
-                    UserName: user,
-                    PolicyArn: result.arn,
-                  })
-                )
-              )
-            );
-            const removeUsers = props.Users
-              ? result.users.filter((u) => !props.Users!.includes(u))
-              : [];
-            const detachUsers = removeUsers.map((u) =>
-              awsSDKRetry(() =>
-                this.iamClient.send(
-                  new iam.DetachUserPolicyCommand({
-                    UserName: u,
-                    PolicyArn: result.arn,
-                  })
-                )
-              )
-            );
-
-            const attachResults = await Promise.allSettled([
-              ...attachGroups,
-              ...detachGroups,
-              ...attachRoles,
-              ...detachRoles,
-              ...attachUser,
-              ...detachUsers,
-            ]);
-
-            // add a max of 10 second padding after adding any managed policy
-            state.tasks["ManagedPolicyPadding"] = wait(10000) as any;
-
-            const failedAttaches = attachResults.filter(
-              (a): a is PromiseRejectedResult => a.status === "rejected"
-            );
-            if (failedAttaches.length > 1) {
-              throw new Error(
-                `Attaching or detaching roles, groups, or users of a Policy failed: ${failedAttaches
-                  .map((a) => a.reason)
-                  .join("\n")}`
-              );
-            }
-
-            return {
-              PhysicalId: result.arn,
-              Type: logicalResource.Type,
-              InputProperties: properties,
-              Attributes: {
-                Arn: result.arn,
-              },
-            };
-          } else if (logicalResource.Type === "AWS::SQS::QueuePolicy") {
-            const props = properties as unknown as SQSQueuePolicyResource;
-
-            const result = await Promise.allSettled(
-              props.Queues.map((q) =>
-                this.sqsClient.send(
-                  new sqs.SetQueueAttributesCommand({
-                    Attributes: {
-                      Policy: JSON.stringify(props.PolicyDocument),
-                    },
-                    QueueUrl: q,
-                  })
-                )
-              )
-            );
-            const failures = result.filter(
-              (x): x is PromiseRejectedResult => x.status === "rejected"
-            );
-            if (failures.length > 0) {
-              throw new Error(
-                `Queue Policy failed to update (${logicalId}): ${failures
-                  .map((f) => f.reason)
-                  .join("\n")}`
-              );
-            }
-            return {
-              PhysicalId: undefined,
-              Attributes: {},
-              Type: logicalResource.Type,
-              InputProperties: props as unknown as PhysicalProperties,
-            };
-          } else {
-            let controlApiResult;
-            if (!update) {
-              console.log(`Creating ${logicalId} (${logicalResource.Type})`);
-              const props = (() => {
-                if (logicalResource.Type === "AWS::DynamoDB::Table") {
-                  // dynamo table pay_per_request fails when ProvisionedThroughput is present.
-                  if (properties.BillingMode === "PAY_PER_REQUEST ") {
-                    const { ProvisionedThroughput, ...props } = properties;
-                    return props;
-                  }
-                }
-                return properties;
-              })();
-              try {
-                console.log(
-                  `Starting Create for ${logicalResource.Type}: ${logicalId}`
-                );
+                console.log(`Updating ${logicalId} (${logicalResource.Type})`);
                 controlApiResult = await awsSDKRetry(() =>
                   this.controlClient.send(
-                    new control.CreateResourceCommand({
+                    new control.UpdateResourceCommand({
                       TypeName: logicalResource.Type,
-                      DesiredState: JSON.stringify(props),
+                      PatchDocument: JSON.stringify(patch),
+                      Identifier: physicalResource.PhysicalId,
                     })
                   )
                 );
-              } catch (err) {
-                console.error(
-                  `error while deploying (${
-                    (<any>err).message
-                  }) ${JSON.stringify(
-                    logicalResource,
-                    null,
-                    2
-                  )} with props ${JSON.stringify(props, null, 2)}`
-                );
-                throw err;
               }
-            } else {
-              const patch = compare(
-                physicalResource.InputProperties,
-                properties
-              );
-              if (patch.length === 0) {
-                console.log(
-                  `Skipping Update of ${logicalId} (${logicalResource.Type})`
+
+              const progress = controlApiResult.ProgressEvent;
+
+              if (progress === undefined) {
+                throw new Error(
+                  `DeleteResourceCommand returned an undefined ProgressEvent`
                 );
-                return physicalResource;
               }
-              console.log(`Updating ${logicalId} (${logicalResource.Type})`);
-              controlApiResult = await awsSDKRetry(() =>
-                this.controlClient.send(
-                  new control.UpdateResourceCommand({
-                    TypeName: logicalResource.Type,
-                    PatchDocument: JSON.stringify(patch),
-                    Identifier: physicalResource.PhysicalId,
-                  })
-                )
+
+              const waitStart = new Date();
+
+              const resource = await this.waitForProgress(
+                logicalId,
+                logicalResource.Type,
+                properties,
+                progress
               );
+
+              return {
+                resource,
+                processTime: new Date().getTime() - waitStart.getTime(),
+              };
             }
-
-            const progress = controlApiResult.ProgressEvent;
-
-            if (progress === undefined) {
-              throw new Error(
-                `DeleteResourceCommand returned an undefined ProgressEvent`
-              );
-            }
-
-            return this.waitForProgress(
-              logicalId,
-              logicalResource.Type,
-              properties,
-              progress
+          } catch (err) {
+            console.error(err);
+            throw new Error(
+              `Error while ${update ? "updating" : "creating"} ${logicalId}: ${
+                (<any>err).message
+              }`
             );
           }
-        } catch (err) {
-          console.error(err);
-          throw new Error(
-            `Error while ${update ? "updating" : "creating"} ${logicalId}: ${
-              (<any>err).message
-            }`
-          );
         }
-      })());
+      ).resource;
     }
   }
 
