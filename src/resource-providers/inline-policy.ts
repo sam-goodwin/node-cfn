@@ -7,10 +7,10 @@ import {
 import {
   CreateRequest,
   DeleteRequest,
-  ModuleHandler,
-  ModuleHandlerProps,
+  ResourceProvider,
+  ResourceProviderProps,
   UpdateRequest,
-} from "../module-handler";
+} from "../resource-provider";
 import { PhysicalResource } from "../resource";
 import { PolicyResource } from "../resource-types";
 import { awsSDKRetry } from "../util";
@@ -18,11 +18,11 @@ import { awsSDKRetry } from "../util";
 /**
  * TODO: Support update?
  */
-export class InlinePolicyHandler implements ModuleHandler<PolicyResource> {
+export class InlinePolicyProvider implements ResourceProvider<PolicyResource> {
   readonly Type = "AWS::IAM::Policy";
   private iamClient: IAMClient;
 
-  constructor(props: ModuleHandlerProps) {
+  constructor(props: ResourceProviderProps) {
     this.iamClient = new IAMClient(props.sdkConfig);
   }
 

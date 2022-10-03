@@ -1,20 +1,20 @@
 import {
   CreateRequest,
   DeleteRequest,
-  ModuleHandler,
-  ModuleHandlerProps,
+  ResourceProvider,
+  ResourceProviderProps,
   UpdateRequest,
-} from "../module-handler";
+} from "../resource-provider";
 import { SQSQueuePolicyResource } from "../resource-types";
 import * as sqs from "@aws-sdk/client-sqs";
 
-export class QueuePolicyHandler
-  implements ModuleHandler<SQSQueuePolicyResource>
+export class QueuePolicyProvider
+  implements ResourceProvider<SQSQueuePolicyResource>
 {
   readonly Type = "AWS::SQS::QueuePolicy";
   private sqsClient: sqs.SQSClient;
 
-  constructor(props: ModuleHandlerProps) {
+  constructor(props: ResourceProviderProps) {
     this.sqsClient = new sqs.SQSClient(props.sdkConfig);
   }
 

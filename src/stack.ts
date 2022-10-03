@@ -54,7 +54,10 @@ import { isDeepEqual, wait } from "./util";
 import { Value } from "./value";
 import { AssetManifest, AssetPublishing } from "cdk-assets";
 import AwsClient from "./aws";
-import { DefaultModuleHandlers, ModuleHandlerProvider } from "./module-handler";
+import {
+  DefaultResourceProviders,
+  ResourceProviders,
+} from "./resource-provider";
 
 /**
  * A map of each {@link LogicalResource}'s Logical ID to its {@link PhysicalProperties}.
@@ -170,7 +173,7 @@ export class Stack {
    * The {@link ssm.SSMClient} to use when resolving {@link SSMParameterType}
    */
   readonly ssmClient: ssm.SSMClient;
-  private readonly handlerProvider: ModuleHandlerProvider;
+  private readonly resourceProviders: ResourceProviders;
 
   /**
    * Current {@link StackState} of the {@link Stack}.
@@ -197,14 +200,14 @@ export class Stack {
       new ssm.SSMClient({
         region: this.region,
       });
-    this.handlerProvider = new ModuleHandlerProvider(
+    this.resourceProviders = new ResourceProviders(
       {
         account: props.account,
         region: props.region,
         sdkConfig: props.sdkConfig,
       },
       // TODO allow extending these from outside
-      DefaultModuleHandlers
+      DefaultResourceProviders
     );
   }
 
@@ -319,7 +322,7 @@ export class Stack {
    * If the current padding is longer than the added padding, nothing will change, if the current padding is shorter, the process will
    * end at least {@link paddingMillis} from this point in time.
    */
-  private addModulePadding(
+  private addDeploymentPadding(
     paddingMillis: number,
     state: UpdateState,
     name: string = "PADDING"
@@ -391,7 +394,7 @@ export class Stack {
           );
 
           if (allowedLogicalIds?.has(logicalId) ?? true) {
-            const handler = this.handlerProvider.getHandler(
+            const provider = this.resourceProviders.getHandler(
               logicalResource.Type
             );
 
@@ -399,7 +402,7 @@ export class Stack {
               throw new Error("Resource much have a physical id to be deleted");
             }
 
-            const result = await handler.delete({
+            const result = await provider.delete({
               logicalId,
               physicalId: physicalResource.PhysicalId,
               previous: physicalResource,
@@ -408,7 +411,7 @@ export class Stack {
             });
 
             if (result && result.paddingMillis) {
-              this.addModulePadding(result.paddingMillis, state);
+              this.addDeploymentPadding(result.paddingMillis, state);
             }
             return;
           } else {
@@ -713,17 +716,17 @@ ${metricsMessage}`);
           const startTime = new Date();
 
           try {
-            const handler = this.handlerProvider.getHandler(
+            const provider = this.resourceProviders.getHandler(
               logicalResource.Type
             );
             const result = await (update
-              ? handler.update({
+              ? provider.update({
                   definition: properties,
                   logicalId,
                   previous: physicalResource,
                   resourceType: logicalResource.Type,
                 })
-              : handler.create({
+              : provider.create({
                   definition: properties,
                   logicalId,
                   resourceType: logicalResource.Type,
@@ -733,7 +736,7 @@ ${metricsMessage}`);
 
             if ("resource" in result) {
               if (result.paddingMillis) {
-                this.addModulePadding(result.paddingMillis, state);
+                this.addDeploymentPadding(result.paddingMillis, state);
               }
               return {
                 resource: result.resource,

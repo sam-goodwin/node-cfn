@@ -1,10 +1,10 @@
 import {
   CreateRequest,
   DeleteRequest,
-  ModuleHandler,
-  ModuleHandlerProps,
+  ResourceProvider as ResourceProvider,
+  ResourceProviderProps as ResourceProviderProps,
   UpdateRequest,
-} from "../module-handler";
+} from "../resource-provider";
 import * as control from "@aws-sdk/client-cloudcontrol";
 import {
   PhysicalProperties,
@@ -14,11 +14,13 @@ import {
 import { awsSDKRetry } from "../util";
 import { compare } from "fast-json-patch";
 
-export class CloudControlHandler implements ModuleHandler<PhysicalProperties> {
+export class CloudControlProvider
+  implements ResourceProvider<PhysicalProperties>
+{
   readonly Type = "AWS::SQS::QueuePolicy";
   private controlClient: control.CloudControlClient;
 
-  constructor(props: ModuleHandlerProps) {
+  constructor(props: ResourceProviderProps) {
     this.controlClient = new control.CloudControlClient(props.sdkConfig);
   }
   async create(

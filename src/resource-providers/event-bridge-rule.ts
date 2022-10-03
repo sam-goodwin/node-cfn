@@ -1,10 +1,10 @@
 import {
   CreateRequest,
   DeleteRequest,
-  ModuleHandler,
-  ModuleHandlerProps,
+  ResourceProvider,
+  ResourceProviderProps,
   UpdateRequest,
-} from "../module-handler";
+} from "../resource-provider";
 import { PhysicalResource } from "../resource";
 import * as events from "@aws-sdk/client-eventbridge";
 
@@ -118,13 +118,13 @@ export interface EventBusRuleEcsParameters {
   TaskDefinitionArn: string;
 }
 
-export class EventBusModuleHandler
-  implements ModuleHandler<EventBusRuleResource>
+export class EventBusRuleProvider
+  implements ResourceProvider<EventBusRuleResource>
 {
   private eventBridgeClient: events.EventBridgeClient;
   readonly Type = "AWS::Events::Rule";
 
-  constructor(props: ModuleHandlerProps) {
+  constructor(props: ResourceProviderProps) {
     this.eventBridgeClient = new events.EventBridgeClient(props.sdkConfig);
   }
 

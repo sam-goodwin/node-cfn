@@ -1,10 +1,10 @@
 import {
   CreateRequest,
   DeleteRequest,
-  ModuleHandler,
-  ModuleHandlerProps,
+  ResourceProvider,
+  ResourceProviderProps,
   UpdateRequest,
-} from "../module-handler";
+} from "../resource-provider";
 import { PhysicalResource } from "../resource";
 import * as events from "@aws-sdk/client-eventbridge";
 import type { Tag } from "@aws-sdk/client-eventbridge";
@@ -31,10 +31,10 @@ interface EventBusResource {
   Tags?: Tag[];
 }
 
-export class EventBusModuleHandler implements ModuleHandler<EventBusResource> {
+export class EventBusProvider implements ResourceProvider<EventBusResource> {
   private eventBridgeClient: events.EventBridgeClient;
 
-  constructor(private props: ModuleHandlerProps) {
+  constructor(private props: ResourceProviderProps) {
     this.eventBridgeClient = new events.EventBridgeClient(props.sdkConfig);
   }
 

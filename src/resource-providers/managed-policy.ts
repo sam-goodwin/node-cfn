@@ -2,20 +2,20 @@ import * as iam from "@aws-sdk/client-iam";
 import {
   CreateRequest,
   DeleteRequest,
-  ModuleHandler,
-  ModuleHandlerProps,
+  ResourceProvider,
+  ResourceProviderProps,
   UpdateRequest,
-} from "../module-handler";
+} from "../resource-provider";
 import { ManagedPolicyResource } from "../resource-types";
 import { awsSDKRetry } from "../util";
 
-export class ManagedPolicyHandler
-  implements ModuleHandler<ManagedPolicyResource>
+export class ManagedPolicyProvider
+  implements ResourceProvider<ManagedPolicyResource>
 {
   readonly Type = "AWS::IAM::Policy";
   private iamClient: iam.IAMClient;
 
-  constructor(private definition: ModuleHandlerProps) {
+  constructor(private definition: ResourceProviderProps) {
     this.iamClient = new iam.IAMClient(definition.sdkConfig);
   }
 
