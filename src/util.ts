@@ -20,3 +20,65 @@ export function isDeepEqual(a: any, b: any): boolean {
     return false;
   }
 }
+
+export async function awsSDKRetry<T>(call: () => T): Promise<Awaited<T>> {
+  return await retry(
+    call,
+    (err) => (err as any).name === "ThrottlingException",
+    () => true,
+    5,
+    1000,
+    2
+  );
+}
+
+export function wait(waitMillis: number) {
+  return new Promise((resolve) => setTimeout(resolve, waitMillis));
+}
+
+export const retry = async <T>(
+  call: () => T | Promise<T>,
+  errorPredicate: (err: unknown) => boolean,
+  predicate: (val: T) => boolean,
+  attempts: number,
+  waitMillis: number,
+  factor: number
+): Promise<Awaited<T>> => {
+  try {
+    const item = await call();
+    if (!predicate(item)) {
+      if (attempts) {
+        await wait(waitMillis);
+        return retry(
+          call,
+          errorPredicate,
+          predicate,
+          attempts - 1,
+          waitMillis * factor,
+          factor
+        );
+      } else {
+        throw Error("Retry attempts exhausted");
+      }
+    }
+    return item;
+  } catch (err) {
+    if (errorPredicate(err)) {
+      if (attempts) {
+        await wait(waitMillis);
+        return retry(
+          call,
+          errorPredicate,
+          predicate,
+          attempts - 1,
+          waitMillis * factor,
+          factor
+        );
+      } else {
+        console.error(`Retry attempts exhausted ${(<any>err).message}`);
+        throw err;
+      }
+    }
+    throw err;
+  }
+};

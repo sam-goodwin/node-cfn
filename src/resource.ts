@@ -89,7 +89,7 @@ export interface PhysicalResources {
 /**
  * A {@link PhysicalResource} provisioned in an AWS account.
  */
-export interface PhysicalResource {
+export interface PhysicalResource<Properties extends any = PhysicalProperties> {
   /**
    * Name of the {@link ResourceType}.
    */
@@ -101,7 +101,7 @@ export interface PhysicalResource {
   /**
    * Input Properties passed to {@link CreateResourceCommand} and {@link UpdateResourceCommand}.
    */
-  InputProperties: PhysicalProperties;
+  InputProperties: Properties;
   /**
    * Attributes exported by the {@link PhysicalResource}.
    */
