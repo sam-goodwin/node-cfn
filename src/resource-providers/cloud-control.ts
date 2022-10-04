@@ -14,6 +14,13 @@ import {
 import { awsSDKRetry } from "../util";
 import { compare } from "fast-json-patch";
 
+/**
+ * Cloud control supports many, but not a complete set of all AWS resource.
+ *
+ * CC is also slower.
+ *
+ * https://docs.aws.amazon.com/cloudcontrolapi/latest/userguide/supported-resources.html
+ */
 export class CloudControlProvider
   implements ResourceProvider<PhysicalProperties>
 {
