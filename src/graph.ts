@@ -75,47 +75,64 @@ export function createDependentGraph(graph: DependencyGraph): DependencyGraph {
   );
 }
 
-export function topoSortWithLevels(graph: DependencyGraph) {
-  // create a mutable dependency graph we'll use later.
-  const depGraph = { ...graph };
-  // we want fast access to all dependents of the graph.
-  const invertedDepGraph = createDependentGraph(graph);
-  // find one or more nodes that have no dependencies
-  const roots = Object.entries(graph)
-    .filter(([, deps]) => deps.length === 0)
-    .map(([k]) => k);
-  if (roots.length === 0) {
-    throw Error("No root resources were found, there is a cycle.");
+export interface TopoEntry {
+  /**
+   * Id of the node
+   */
+  resourceId: string;
+  /**
+   * Depth of the resource, Max depth of all dependencies + 1 or 1
+   */
+  level: number;
+  /**
+   * Unique ordinal where the resource has all dependencies resolved
+   */
+  post: number;
+  /**
+   * Unique ordinal where the resource was first discovered.
+   *
+   * Generally this doesn't provide much value, however the distance between post and pre can help
+   * determine the complexity of the dependencies of the resource.
+   */
+  pre: number;
+}
+
+export function topoSortWithLevels(graph: DependencyGraph): TopoEntry[] {
+  let pres: Record<string, number> = {};
+  let posts: Record<string, number> = {};
+  let depth: Record<string, number> = {};
+  let post = 0; // post-order, when all resolvable children are resolved
+  let pre = 0; // pre-order, when the node can be resolved
+
+  Object.keys(graph).forEach(visit);
+
+  return Object.keys(graph)
+    .map((node) => ({
+      resourceId: node,
+      level: depth[node],
+      post: posts[node],
+      pre: pres[node],
+    }))
+    .sort((a, b) => (a.post < b.post ? -1 : a.post > b.post ? 1 : 0));
+
+  function visit(node: string): number {
+    if (node in depth) {
+      // ongoing, circular
+      if (node in pres && !(node in posts)) {
+        throw new Error("Circular reference...");
+      }
+      return depth[node];
+    }
+    pres[node] = pre++;
+    const depths = graph[node].map(visit);
+    if (depths.length === 0) {
+      depth[node] = 1;
+    } else {
+      depth[node] = Math.max(...depths) + 1;
+    }
+    posts[node] = post++;
+    return depth[node];
   }
-  // bootstrap our queue with all of the root resources.
-  let q: { id: string; level: number }[] = roots.map((c) => ({
-    id: c,
-    level: 1,
-  }));
-  let topo: { id: string; level: number }[] = [];
-  while (q.length > 0) {
-    const { id: current, level } = q.shift()!;
-
-    topo.push({ id: current, level });
-
-    // find all unsatisfied deps (has a dependency left)
-    const unsatisfiedDeps = invertedDepGraph[current].filter(
-      (d) => depGraph[d].length > 0
-    );
-
-    // remove current from all deps
-    // return deps that are now satisfied.
-    const satisfied = unsatisfiedDeps.filter((dep) => {
-      // EWWWWWWW - mutation in a filter, bad sam.
-      depGraph[dep] = depGraph[dep].filter((d) => d !== current);
-      return depGraph[dep].length === 0;
-    });
-
-    // add the level as the level of the parent where it was discovered
-    q.push(...satisfied.map((c) => ({ id: c, level: level + 1 })));
-  }
-
-  return topo;
 }
 
 const emptySet = ImmutableSet<string>([]);
