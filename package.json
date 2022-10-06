@@ -59,7 +59,8 @@
     "aws-sdk": "^2.1225.0",
     "cdk-assets": "^2.43.1",
     "fast-json-patch": "^3.1.0",
-    "immutable": "^4.0.0"
+    "immutable": "^4.0.0",
+    "short-uuid": "^4.2.0"
   },
   "main": "lib/index.js",
   "license": "Apache-2.0",

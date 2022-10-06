@@ -13,6 +13,8 @@ import { ManagedPolicyProvider } from "./resource-providers/managed-policy";
 import { QueuePolicyProvider } from "./resource-providers/queue-policy";
 import type { PhysicalResource, ResourceType } from "./resource";
 import { EventBusRuleProvider } from "./resource-providers/event-bridge-rule";
+import { RoleProvider } from "./resource-providers/role";
+import { QueueProvider } from "./resource-providers/queue";
 
 export interface CreateRequest<Properties> {
   logicalId: string;
@@ -52,10 +54,15 @@ export type ModuleOperationResult<Properties = any> = Promise<
   | ({ resource: PhysicalResource<Properties> } & ModuleOperationResultMetadata)
 >;
 
+export interface ResourceProviderRetryConfig {
+  canRetry: ("CREATE" | "DELETE" | "UPDATE")[] | true;
+}
+
 /**
  * TODO: support optional snapshot.
  */
 export interface ResourceProvider<Properties = any> {
+  retry?: ResourceProviderRetryConfig;
   create(request: CreateRequest<Properties>): ModuleOperationResult<Properties>;
   update(request: UpdateRequest<Properties>): ModuleOperationResult<Properties>;
   delete(
@@ -78,6 +85,8 @@ export const DefaultResourceProviders: Record<
   "AWS::IAM::Policy": (props) => new InlinePolicyProvider(props),
   "AWS::IAM::ManagedPolicy": (props) => new ManagedPolicyProvider(props),
   "AWS::SQS::QueuePolicy": (props) => new QueuePolicyProvider(props),
+  "AWS::SQS::Queue": (props) => new QueueProvider(props),
+  "AWS::IAM::Role": (props) => new RoleProvider(props),
   [DEFAULT_RESOURCE_PROVIDER_KEY]: (props) => new CloudControlProvider(props),
 };
 

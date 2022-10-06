@@ -77,16 +77,22 @@ export interface StackState {
   outputs: Record<string, string>;
 }
 
-export interface Module {
+export interface ResourceProcessMetrics {
+  processTime?: number;
+  waitTime?: number;
+  retries?: number;
+}
+
+export interface Resource {
   // the process which when complete, evaluates the resource
   resource: Promise<PhysicalResource | undefined>;
   operation?: "UPDATE" | "CREATE" | "DELETE";
-  processTime?: number;
-  start?: Date;
-  end?: Date;
   dependencies: string[];
   type?: string;
   name: string;
+  metrics?: ResourceProcessMetrics;
+  start?: Date;
+  end?: Date;
 }
 
 export interface UpdateState {
@@ -118,7 +124,7 @@ export interface UpdateState {
    * Map of `logicalId` to a task ({@link Promise}) resolving the new state of the {@link PhysicalResource}.
    */
   modules: {
-    [logicalId: string]: Module;
+    [logicalId: string]: Resource;
   };
 }
 
@@ -151,6 +157,13 @@ export interface StackProps {
    * TODO: fix this...
    */
   readonly sdkConfig?: any;
+}
+
+interface OperationResult {
+  retryWaitTime: number;
+  retries: number;
+  processTime: number;
+  resource: PhysicalResource | undefined;
 }
 
 /**
@@ -280,27 +293,29 @@ export class Stack {
     );
   }
 
-  private startProcessModule(
+  private startProcessResource(
     logicalId: string,
     operation: "UPDATE" | "CREATE" | "DELETE" | undefined,
     state: UpdateState,
     type: string | undefined,
-    operationTask: (start: Date) => Promise<{
-      processTime: number;
-      resource: PhysicalResource | undefined;
-    }>
-  ): Module {
+    operationTask: (start: Date) => Promise<OperationResult>
+  ): Resource {
     if (state.modules[logicalId]) {
       throw new Error("LogcalId started with two operations.");
     } else {
       const start = new Date();
       return (state.modules[logicalId] = {
-        start: start,
+        start,
         resource: operationTask(start).then((x) => {
           state.modules[logicalId] = {
             ...state.modules[logicalId],
             end: new Date(),
-            processTime: x.processTime,
+            metrics: {
+              ...state.modules[logicalId].metrics,
+              processTime: x.processTime,
+              retries: x.retries,
+              waitTime: x.retryWaitTime,
+            },
           };
           return x.resource;
         }),
@@ -426,7 +441,7 @@ export class Stack {
         return __exhaustive;
       };
 
-      return this.startProcessModule(
+      return this.startProcessResource(
         logicalId,
         "DELETE",
         state,
@@ -436,6 +451,8 @@ export class Stack {
           return {
             resource: await process(),
             processTime: new Date().getTime() - start.getTime(),
+            retries: 0,
+            retryWaitTime: 0,
           };
         }
       ).resource;
@@ -563,11 +580,6 @@ export class Stack {
     } finally {
       console.log("Cleaning Up");
 
-      console.log(
-        Object.keys(state.modules).length,
-        Object.keys(state.modules)
-      );
-
       // await any leaf tasks not awaited already
       const completedModules = await Promise.allSettled(
         Object.values(state.modules).map(async (x) => ({
@@ -597,12 +609,14 @@ export class Stack {
             r.value.module.end && r.value.module.start
               ? r.value.module.end.getTime() - r.value.module.start.getTime()
               : "NA"
-          } P: ${r.value.module.processTime ?? "NA"}`;
+          } P: ${r.value.module.metrics?.processTime ?? "NA"} R: ${
+            r.value.module.metrics?.retries ?? "NA"
+          } RT: ${r.value.module.metrics?.waitTime ?? "NA"}`;
         })
         .join("\n");
       const typeMetrics = succeededModules.reduce(
         (metrics: Record<string, { avgProcessTime: number; n: number }>, m) => {
-          const processTime = m.value.module.processTime;
+          const processTime = m.value.module.metrics?.processTime;
           const type = m.value.module.type;
           if (!type || !processTime) {
             return metrics;
@@ -665,7 +679,7 @@ ${metricsMessage}`);
       const physicalResource = this.getPhysicalResource(logicalId);
       const update = physicalResource !== undefined;
 
-      return this.startProcessModule(
+      return this.startProcessResource(
         logicalId,
         update ? "UPDATE" : "CREATE",
         state,
@@ -684,7 +698,12 @@ ${metricsMessage}`);
               state
             );
             if (!shouldCreate) {
-              return { resource: undefined, processTime: 0 };
+              return {
+                resource: undefined,
+                processTime: 0,
+                retries: 0,
+                retryWaitTime: 0,
+              };
             }
           }
 
@@ -715,46 +734,80 @@ ${metricsMessage}`);
 
           const startTime = new Date();
 
-          try {
-            const provider = this.resourceProviders.getHandler(
-              logicalResource.Type
-            );
-            const result = await (update
-              ? provider.update({
-                  definition: properties,
-                  logicalId,
-                  previous: physicalResource,
-                  resourceType: logicalResource.Type,
-                })
-              : provider.create({
-                  definition: properties,
-                  logicalId,
-                  resourceType: logicalResource.Type,
-                }));
+          const provider = this.resourceProviders.getHandler(
+            logicalResource.Type
+          );
 
-            const processTime = new Date().getTime() - startTime.getTime();
+          // TODO support for delete.
+          // TODO let the providers override the attempts, delay, and backoff.
+          const retry = provider.retry;
+          const attemptsBase =
+            retry &&
+            retry.canRetry &&
+            (retry.canRetry === true ||
+              (Array.isArray(retry.canRetry) &&
+                retry.canRetry.includes(update ? "UPDATE" : "CREATE")))
+              ? 5
+              : 1;
+          let totalDelay = 0;
+          const backoff = 2;
+          const self = this;
 
-            if ("resource" in result) {
-              if (result.paddingMillis) {
-                this.addDeploymentPadding(result.paddingMillis, state);
+          return startWithRetry(attemptsBase, 1000);
+
+          async function startWithRetry(
+            attempts: number,
+            delay: number
+          ): Promise<OperationResult> {
+            try {
+              const result = await (update
+                ? provider.update({
+                    definition: properties,
+                    logicalId,
+                    previous: physicalResource,
+                    resourceType: logicalResource.Type,
+                  })
+                : provider.create({
+                    definition: properties,
+                    logicalId,
+                    resourceType: logicalResource.Type,
+                  }));
+
+              const processTime = new Date().getTime() - startTime.getTime();
+
+              if ("resource" in result) {
+                if (result.paddingMillis) {
+                  self.addDeploymentPadding(result.paddingMillis, state);
+                }
+                return {
+                  resource: result.resource,
+                  processTime,
+                  retries: attemptsBase - attempts,
+                  retryWaitTime: totalDelay,
+                };
+              } else {
+                return {
+                  processTime,
+                  resource: result,
+                  retries: attemptsBase - attempts,
+                  retryWaitTime: totalDelay,
+                };
               }
-              return {
-                resource: result.resource,
-                processTime,
-              };
-            } else {
-              return {
-                processTime,
-                resource: result,
-              };
+            } catch (err) {
+              if (attempts > 1) {
+                totalDelay += delay;
+                console.log(`Waiting for consistency (${delay}): ${logicalId}`);
+                await wait(delay);
+                return await startWithRetry(attempts - 1, delay * backoff);
+              } else {
+                console.error(err);
+                throw new Error(
+                  `Error while ${
+                    update ? "updating" : "creating"
+                  } ${logicalId}: ${(<any>err).message}`
+                );
+              }
             }
-          } catch (err) {
-            console.error(err);
-            throw new Error(
-              `Error while ${update ? "updating" : "creating"} ${logicalId}: ${
-                (<any>err).message
-              }`
-            );
           }
         }
       ).resource;

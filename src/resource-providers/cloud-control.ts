@@ -3,6 +3,7 @@ import {
   DeleteRequest,
   ResourceProvider as ResourceProvider,
   ResourceProviderProps as ResourceProviderProps,
+  ResourceProviderRetryConfig,
   UpdateRequest,
 } from "../resource-provider";
 import * as control from "@aws-sdk/client-cloudcontrol";
@@ -30,6 +31,7 @@ export class CloudControlProvider
   constructor(props: ResourceProviderProps) {
     this.controlClient = new control.CloudControlClient(props.sdkConfig);
   }
+  retry: ResourceProviderRetryConfig = { canRetry: true };
   async create(
     request: CreateRequest<PhysicalProperties>
   ): Promise<
