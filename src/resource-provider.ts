@@ -15,6 +15,9 @@ import type { PhysicalResource, ResourceType } from "./resource";
 import { EventBusRuleProvider } from "./resource-providers/event-bridge-rule";
 import { RoleProvider } from "./resource-providers/role";
 import { QueueProvider } from "./resource-providers/queue";
+import { SecretProvider } from "./resource-providers/secret";
+import { NoOpProvider } from "./resource-providers/no-op";
+import { EventSourceMappingProvider } from "./resource-providers/event-source-mapping";
 
 export interface CreateRequest<Properties> {
   logicalId: string;
@@ -37,7 +40,7 @@ export interface DeleteRequest<Properties> {
   snapshotDone: boolean;
 }
 
-export interface ModuleOperationResultMetadata {
+export interface ResourceOperationResultMetadata {
   /**
    * Minimum milliseconds to wait after all deployment operations are complete.
    *
@@ -49,9 +52,11 @@ export interface ModuleOperationResultMetadata {
   paddingMillis?: number;
 }
 
-export type ModuleOperationResult<Properties = any> = Promise<
+export type ResourceOperationResult<Properties = any> = Promise<
   | PhysicalResource<Properties>
-  | ({ resource: PhysicalResource<Properties> } & ModuleOperationResultMetadata)
+  | ({
+      resource: PhysicalResource<Properties>;
+    } & ResourceOperationResultMetadata)
 >;
 
 export interface ResourceProviderRetryConfig {
@@ -63,11 +68,15 @@ export interface ResourceProviderRetryConfig {
  */
 export interface ResourceProvider<Properties = any> {
   retry?: ResourceProviderRetryConfig;
-  create(request: CreateRequest<Properties>): ModuleOperationResult<Properties>;
-  update(request: UpdateRequest<Properties>): ModuleOperationResult<Properties>;
+  create(
+    request: CreateRequest<Properties>
+  ): ResourceOperationResult<Properties>;
+  update(
+    request: UpdateRequest<Properties>
+  ): ResourceOperationResult<Properties>;
   delete(
     request: DeleteRequest<Properties>
-  ): Promise<void | ModuleOperationResultMetadata>;
+  ): Promise<void | ResourceOperationResultMetadata>;
 }
 
 export type ResourceProviderInitializer<Properties = any> = (
@@ -87,6 +96,10 @@ export const DefaultResourceProviders: Record<
   "AWS::SQS::QueuePolicy": (props) => new QueuePolicyProvider(props),
   "AWS::SQS::Queue": (props) => new QueueProvider(props),
   "AWS::IAM::Role": (props) => new RoleProvider(props),
+  "AWS::SecretsManager::Secret": (props) => new SecretProvider(props),
+  "AWS::CDK::Metadata": new NoOpProvider(),
+  "AWS::Lambda::EventSourceMapping": (props) =>
+    new EventSourceMappingProvider(props),
   [DEFAULT_RESOURCE_PROVIDER_KEY]: (props) => new CloudControlProvider(props),
 };
 

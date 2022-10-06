@@ -1,7 +1,7 @@
 import {
   CreateRequest,
   DeleteRequest,
-  ModuleOperationResult,
+  ResourceOperationResult,
   ResourceProvider,
   ResourceProviderProps,
   UpdateRequest,
@@ -130,12 +130,12 @@ export class EventBusRuleProvider
 
   async create(
     request: CreateRequest<EventBusRuleResource>
-  ): ModuleOperationResult<EventBusRuleResource> {
+  ): ResourceOperationResult<EventBusRuleResource> {
     return this.createUpdate(request.logicalId, request.definition);
   }
   update(
     request: UpdateRequest<EventBusRuleResource>
-  ): ModuleOperationResult<EventBusRuleResource> {
+  ): ResourceOperationResult<EventBusRuleResource> {
     return this.createUpdate(request.logicalId, request.definition);
   }
   delete(_request: DeleteRequest<EventBusRuleResource>): Promise<void> {
@@ -144,7 +144,7 @@ export class EventBusRuleProvider
   async createUpdate(
     logicalId: string,
     definition: EventBusRuleResource
-  ): ModuleOperationResult<EventBusRuleResource> {
+  ): ResourceOperationResult<EventBusRuleResource> {
     const { Targets, ..._definition } = definition;
 
     const input: events.PutRuleCommandInput = {

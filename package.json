@@ -1,7 +1,7 @@
 {
   "name": "node-cfn",
   "bin": {
-    "node-cfn": "./bin/node-cfn.js",
+    "node-cfn": "lib/main.js",
     "node-cfn.js": "bin/node-cfn.js"
   },
   "scripts": {
@@ -29,11 +29,9 @@
   "devDependencies": {
     "@types/immutable": "^3.8.7",
     "@types/jest": "^27.4.0",
-    "@types/node": "16",
+    "@types/node": "^16",
     "@typescript-eslint/eslint-plugin": "^5",
     "@typescript-eslint/parser": "^5",
-    "chalk": "4",
-    "commander": "^9.4.1",
     "eslint": "^8",
     "eslint-config-prettier": "^8.3.0",
     "eslint-import-resolver-node": "^0.3.6",
@@ -56,14 +54,21 @@
     "@aws-sdk/client-cloudcontrol": "^3.48.0",
     "@aws-sdk/client-eventbridge": "^3.179.0",
     "@aws-sdk/client-iam": "^3.180.0",
+    "@aws-sdk/client-lambda": "^3.185.0",
+    "@aws-sdk/client-secrets-manager": "^3.185.0",
     "@aws-sdk/client-sqs": "^3.180.0",
     "@aws-sdk/client-ssm": "^3.48.0",
     "@aws-sdk/client-sts": "^3.180.0",
     "aws-sdk": "^2.1225.0",
     "cdk-assets": "^2.43.1",
+    "chalk": "4",
+    "commander": "*",
     "fast-json-patch": "^3.1.0",
     "immutable": "^4.0.0",
     "short-uuid": "^4.2.0"
+  },
+  "engines": {
+    "node": ">= 16.0.0"
   },
   "main": "lib/index.js",
   "license": "Apache-2.0",

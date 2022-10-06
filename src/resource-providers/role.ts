@@ -3,8 +3,8 @@ import * as iam from "@aws-sdk/client-iam";
 import {
   CreateRequest,
   DeleteRequest,
-  ModuleOperationResult,
-  ModuleOperationResultMetadata,
+  ResourceOperationResult,
+  ResourceOperationResultMetadata,
   ResourceProvider,
   ResourceProviderProps,
   UpdateRequest,
@@ -32,7 +32,7 @@ export class RoleProvider implements ResourceProvider<RoleResource> {
   }
   async create(
     request: CreateRequest<RoleResource>
-  ): ModuleOperationResult<RoleResource> {
+  ): ResourceOperationResult<RoleResource> {
     const { AssumeRolePolicyDocument, Policies, ...def } = request.definition;
     const result = await this.iamClient.send(
       new CreateRoleCommand({
@@ -87,12 +87,12 @@ export class RoleProvider implements ResourceProvider<RoleResource> {
   }
   update(
     _request: UpdateRequest<RoleResource>
-  ): ModuleOperationResult<RoleResource> {
+  ): ResourceOperationResult<RoleResource> {
     throw new Error("Method not implemented.");
   }
   delete(
     _request: DeleteRequest<RoleResource>
-  ): Promise<void | ModuleOperationResultMetadata> {
+  ): Promise<void | ResourceOperationResultMetadata> {
     throw new Error("Method not implemented.");
   }
 }

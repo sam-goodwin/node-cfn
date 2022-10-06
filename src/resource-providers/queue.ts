@@ -1,7 +1,7 @@
 import {
   CreateRequest,
   DeleteRequest,
-  ModuleOperationResult,
+  ResourceOperationResult,
   ResourceProvider,
   ResourceProviderProps,
   UpdateRequest,
@@ -40,27 +40,25 @@ export class QueueProvider implements ResourceProvider<QueueResource> {
 
   async create(request: CreateRequest<QueueResource>) {
     const { QueueName, Tags, ...attributes } = request.definition;
-    const payload = {
-      QueueName:
-        QueueName ??
-        // The name of a FIFO queue can only include alphanumeric characters, hyphens, or underscores, must end with .fifo suffix and be 1 to 80 in length.
-        `${`${request.logicalId}-${short_uuid.generate()}`.substring(
-          0,
-          attributes.FifoQueue ? 75 : 80
-        )}${attributes.FifoQueue ? ".fifo" : ""}`,
-      Attributes: {
-        ...Object.fromEntries(
-          Object.entries(attributes).map(([key, value]) => [
-            key,
-            typeof value === "string" ? value : JSON.stringify(value),
-          ])
-        ),
-      },
-      tags: Object.fromEntries(Tags?.map((t) => [t.Key, t.Value]) ?? []),
-    };
-    console.log("Queue payload: ", JSON.stringify(payload, null, 2));
     const result = await this.sqsClient.send(
-      new sqs.CreateQueueCommand(payload)
+      new sqs.CreateQueueCommand({
+        QueueName:
+          QueueName ??
+          // The name of a FIFO queue can only include alphanumeric characters, hyphens, or underscores, must end with .fifo suffix and be 1 to 80 in length.
+          `${`${request.logicalId}-${short_uuid.generate()}`.substring(
+            0,
+            attributes.FifoQueue ? 75 : 80
+          )}${attributes.FifoQueue ? ".fifo" : ""}`,
+        Attributes: {
+          ...Object.fromEntries(
+            Object.entries(attributes).map(([key, value]) => [
+              key,
+              typeof value === "string" ? value : JSON.stringify(value),
+            ])
+          ),
+        },
+        tags: Object.fromEntries(Tags?.map((t) => [t.Key, t.Value]) ?? []),
+      })
     );
     const queueUrl = result.QueueUrl;
     if (!queueUrl) {
@@ -82,7 +80,7 @@ export class QueueProvider implements ResourceProvider<QueueResource> {
   }
   update(
     _request: UpdateRequest<QueueResource>
-  ): ModuleOperationResult<QueueResource> {
+  ): ResourceOperationResult<QueueResource> {
     throw new Error("Method not implemented.");
   }
   delete(_request: DeleteRequest<QueueResource>): Promise<void> {

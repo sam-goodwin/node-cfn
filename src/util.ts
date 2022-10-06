@@ -1,4 +1,5 @@
 import assert from "assert";
+import shortUUID from "short-uuid";
 
 /**
  * Makes a type-assertion function for a type {@link T}, using just a single {@link key}.
@@ -82,3 +83,14 @@ export const retry = async <T>(
     throw err;
   }
 };
+
+export function uniqueName(
+  base?: string,
+  maxLength?: number,
+  separator: string = "-"
+) {
+  const n = base
+    ? `${base}${separator}${shortUUID.generate()}`
+    : shortUUID.generate();
+  return maxLength ? n.substring(0, maxLength) : n;
+}
