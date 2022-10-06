@@ -97,41 +97,70 @@ export interface TopoEntry {
   pre: number;
 }
 
-export function topoSortWithLevels(graph: DependencyGraph): TopoEntry[] {
-  let pres: Record<string, number> = {};
-  let posts: Record<string, number> = {};
-  let depth: Record<string, number> = {};
-  let post = 0; // post-order, when all resolvable children are resolved
-  let pre = 0; // pre-order, when the node can be resolved
+/**
+ * @param improvedOrder when true, runs the algorithm twice, once with random order keys and again running the lowest
+ *                      most dependency first. This should put dependencies as near to their dependents as possible.
+ */
+export function topoSortWithLevels(
+  graph: DependencyGraph,
+  improvedOrder?: boolean
+): TopoEntry[] {
+  const randomOrderKeys = Object.keys(graph);
 
-  Object.keys(graph).forEach(visit);
+  // run once using the random ordered keys
+  const topo1 = topoSort(randomOrderKeys);
 
-  return Object.keys(graph)
-    .map((node) => ({
-      resourceId: node,
-      level: depth[node],
-      post: posts[node],
-      pre: pres[node],
-    }))
-    .sort((a, b) => (a.post < b.post ? -1 : a.post > b.post ? 1 : 0));
+  if (!improvedOrder) {
+    return topo1;
+  }
 
-  function visit(node: string): number {
-    if (node in depth) {
-      // ongoing, circular
-      if (node in pres && !(node in posts)) {
-        throw new Error("Circular reference...");
+  // run again starting with the lowest depth nodes (highest numbers)
+  // to improve the sorted output order
+  return topoSort(
+    // sort by level descending and run again.
+    topo1
+      .sort((a, b) => (a.post < b.post ? 1 : a.post > b.post ? -1 : 0))
+      .map((a) => a.resourceId)
+  );
+
+  function topoSort(keys: string[]) {
+    let pres: Record<string, number> = {};
+    let posts: Record<string, number> = {};
+    let depth: Record<string, number> = {};
+    let post = 0; // post-order, when all resolvable children are resolved
+    let pre = 0; // pre-order, when the node can be resolved
+
+    console.log(keys);
+
+    keys.forEach(visit);
+
+    return Object.keys(graph)
+      .map((node) => ({
+        resourceId: node,
+        level: depth[node],
+        post: posts[node],
+        pre: pres[node],
+      }))
+      .sort((a, b) => (a.post < b.post ? -1 : a.post > b.post ? 1 : 0));
+
+    function visit(node: string): number {
+      if (node in depth) {
+        // ongoing, circular
+        if (node in pres && !(node in posts)) {
+          throw new Error("Circular reference...");
+        }
+        return depth[node];
       }
+      pres[node] = pre++;
+      const depths = graph[node].map(visit);
+      if (depths.length === 0) {
+        depth[node] = 1;
+      } else {
+        depth[node] = Math.max(...depths) + 1;
+      }
+      posts[node] = post++;
       return depth[node];
     }
-    pres[node] = pre++;
-    const depths = graph[node].map(visit);
-    if (depths.length === 0) {
-      depth[node] = 1;
-    } else {
-      depth[node] = Math.max(...depths) + 1;
-    }
-    posts[node] = post++;
-    return depth[node];
   }
 }
 
